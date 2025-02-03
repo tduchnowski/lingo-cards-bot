@@ -1,5 +1,5 @@
 import argparse
-from translations.translations import Chat, WordList, WordProcessor, ChatError
+from translations.translator import Chat, WordList, WordProcessor, ChatError
 from translations.frequencies import make_lemmas
 
 
