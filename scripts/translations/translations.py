@@ -42,7 +42,7 @@ class WordList:
         self.name = name
         self._path = path
         self.words = []
-        self.add_from_file(path)
+        self.add_from_csv(path)
 
     def __repr__(self):
         return f"WordList(name=\"{self.name}\", path=\"{self._path}\")"
@@ -52,9 +52,9 @@ class WordList:
             return len(self.words)
         return 0
 
-    def add_from_file(self, path: str):
+    def add_from_csv(self, path: str):
         """
-        Generates a list of words from a .txt file with words separated by a newline
+        Loads a list of words from a .txt file with words separated by a newline
         """
         # TODO better handling of the exception
         try:
@@ -102,13 +102,6 @@ root forms. Output just the root forms, each in one line."""
         prompt = self.prompt_template.replace('<word-list>', ', '.join(words))
         response = self.chat(prompt)
         return self._convert_response_to_json(response)
-
-    def correct_words(self, words:list) -> list:
-        """
-        For a given list of words, outputs the root of those words
-        For example, "running" should become "to run", "sits" should be "to sit" etc.
-        """
-        return []
 
     def _convert_response_to_json(self, response):
         pass
