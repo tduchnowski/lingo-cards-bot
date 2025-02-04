@@ -1,5 +1,4 @@
 import argparse
-from translations.translator import Chat, WordList, WordProcessor, ChatError
 from translations.frequencies import make_lemmas
 
 
@@ -39,21 +38,6 @@ def main():
         lemmas(args.wordlist_path, args.destination, args.language)
     else:
         print("Type -h for available commands.")
-    # base_dir = os.path.dirname(__file__)
-    # words_paths = {
-    #     "Polish": os.path.join(base_dir, 'WordLists/Polish.txt'),
-    #     "Russian": os.path.join(base_dir, 'WordLists/Russian.txt')
-    # }
-    # word_lists = [WordList(name, path) for name, path in words_paths.items()]
-    # try:
-    #     chat = Chat(base_url="https://api.deepseek.com", api_key='', model='deepseek-chat')
-    #     for wl in word_lists:
-    #         wp = WordProcessor(chat, wl.name, 'English')
-    #         #wp.translate_words(wl.words)
-    # except ChatError as ce:
-    #     print(ce)
-    # except Exception as e:
-    #     print(e)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,3 @@
-import time
 import re
 import spacy
 from collections import namedtuple
@@ -25,6 +24,7 @@ class Lemmanizator:
         doc = self.nlp(word)
         return [token.lemma_ for token in doc][0]
 
+
 def extract_freqs(path):
     with open(path) as f:
         lines = f.read()
@@ -46,33 +46,17 @@ def expand_dict(dict_to_expand, dict_to_add):
         dict_to_expand[k] = dict_to_expand.get(k, 0) + v
     return dict_to_expand
 
-def calculate_remaining_time(avg_per_batch, remaining_batches):
-    estimated_time_remaining = avg_per_batch * remaining_batches
-    est_time_min = estimated_time_remaining// 60
-    est_time_s = int(estimated_time_remaining - (60 * est_time_min))
-    return est_time_min, est_time_s
-
-def show_progress(start_time, completed_batches, remaining_batches):
-    total_batches = completed_batches + remaining_batches
-    curr_time = time.time()
-    avg_per_batch = (curr_time - start_time)/completed_batches
-    est_time_min, est_time_s = calculate_remaining_time(avg_per_batch, remaining_batches)
-    completed_perc = 100*(completed_batches/total_batches)
-    print(f'Completed {completed_perc:.0f}%. Estimated time left: {est_time_min:.0f}min {est_time_s}s')
-
-
 def make_lemmas(frequencies_list_path, language, cpus):
     lemmas_freq = {}
     frequencies = extract_freqs(frequencies_list_path)
     frequencies_len = len(frequencies)
     batch_size = frequencies_len//cpus
     lemma = Lemmanizator(language)
-    print('\rStarted processing', frequencies_len, 'words')
     todo = {}
     remaining_batches = frequencies_len/batch_size
     completed_batches = 0
+    print('\rStarted processing', frequencies_len, 'words')
     with futures.ProcessPoolExecutor(cpus) as ppe:
-        start_time = time.time()
         for start in range(0, frequencies_len, batch_size):
             stop = min(frequencies_len, start + batch_size)
             future = ppe.submit(process_batch, lemma, frequencies[start:stop])
@@ -84,10 +68,5 @@ def make_lemmas(frequencies_list_path, language, cpus):
             expand_dict(lemmas_freq, partial_lemmas_freq)
             completed_batches += 1
             remaining_batches -= 1
-            show_progress(start_time, completed_batches, remaining_batches)
     print("Finished creating lemmas frequencies")
     return lemmas_freq
-    # save_csv(lemmas_freq, target_path)
-
-# if __name__ == '__main__':
-#     make_lemmas('./scripts/translations/WordLists/Leipzig/Polish/pol-com_web_2018_1M/pol-com_web_2018_1M-words.txt', './test_procs.csv', 'Polish')
