@@ -1,18 +1,19 @@
 import argparse
-from translations.frequencies import make_lemmas
+from translations.frequencies import extract_freqs, process_batch
 
 
 def translate(path):
     print(path)
 
-def lemmas(path, destination, language, cpus=6):
-    lemmas_frequencies = make_lemmas(path, language, cpus=cpus)    
-    save_csv(lemmas_frequencies, destination)
+def validate(path, destination):
+    frequencies = extract_freqs(path)
+    filtered = process_batch(frequencies)    
+    save_csv(filtered, destination)
 
-def save_csv(frequencies_dict, target_path):
+def save_csv(word_freqs, target_path):
     print(f'Saving to {target_path}')
     header = "word,frequency\n"
-    lines = [f"{k}, {v}" for k, v in frequencies_dict.items()]
+    lines = [f"{wf.word}, {wf.freq}" for wf in word_freqs]
     with open(target_path, 'w') as f:
         f.write(header)
         f.write('\n'.join(lines))
@@ -26,20 +27,18 @@ def main():
     translate_cmd = subparsers.add_parser('translate', help="translate word lists specified in a .json file")
     translate_cmd.add_argument("config", type=str, help="path to a config file containing word lists locations")
     # lemmas command
-    lemmas_cmd = subparsers.add_parser('lemmas', help="transform words into lemmas")
+    lemmas_cmd = subparsers.add_parser('validate', help="transform words into lemmas")
     lemmas_cmd.add_argument('wordlist_path', type=str, help='path to a file containing list of words')
     lemmas_cmd.add_argument('destination', type=str, help='path of a file where a result is going to be saved')
-    lemmas_cmd.add_argument('--language', type=str, help='language of the words that frequency list contains')
     lemmas_cmd.add_argument('--cpus', type=int, help='number of cpus used for generating lemmas')
     args = parser.parse_args()
     if args.command == 'translate':
         translate(args.config)
-    elif args.command == 'lemmas':
-        lemmas(args.wordlist_path, args.destination, args.language)
+    elif args.command == 'validate':
+        validate(args.wordlist_path, args.destination)
     else:
         print("Type -h for available commands.")
 
 
 if __name__ == "__main__":
     main()
-
