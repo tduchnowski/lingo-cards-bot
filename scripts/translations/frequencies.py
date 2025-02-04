@@ -21,7 +21,7 @@ class Lemmanizator:
     def process_word(self, word):
         if len(word) < 4 or any(char.isdigit() for char in word):
             return ''
-        doc = self.nlp(word)
+        doc = self.nlp(word.lower())
         return [token.lemma_ for token in doc][0]
 
 
