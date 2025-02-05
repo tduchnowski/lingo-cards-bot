@@ -1,9 +1,11 @@
+-- WORDS TABLE SETUP
 CREATE TABLE words (
   id bigserial PRIMARY KEY,
   word VARCHAR(50) NOT NULL,
   lang_code VARCHAR(5) NOT NULL,
   language VARCHAR(20) NOT NULL,
   meaning TEXT,
+  lemma VARCHAR(50),
   usage TEXT,
   part_of_speech VARCHAR(10),
   frequency INTEGER CHECK (frequency >= 0),
@@ -29,3 +31,10 @@ WHERE lang_code = 'pl';
 CREATE VIEW words_ru AS
 SELECT * FROM words
 WHERE lang_code = 'ru';
+
+-- TELEGRAM USERS TABLE SETUP
+CREATE TABLE users (
+  id bigint PRIMARY KEY,
+  -- preferences
+  lang_code VARCHAR(5)
+)

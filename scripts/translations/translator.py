@@ -56,7 +56,7 @@ class WordList:
         """
         Loads a list of words from a .txt file with words separated by a newline
         """
-        # TODO better handling of the exception
+        # TODO: better handling of the exception
         try:
             with open(path, 'r') as f:
                 self.words += [line.strip() for line in f.readlines()]
