@@ -3,3 +3,5 @@ scripts/translations/WordLists/
 .env
 scripts/translations/__pycache__/
 venv3.12/
+scripts/tests/__pycache__/
+scripts/server/__pycache__/
