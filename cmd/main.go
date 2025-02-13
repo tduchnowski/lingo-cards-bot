@@ -21,6 +21,7 @@ func main() {
 	bot.AddCommand("/menu", menu)
 	bot.AddCommand("/about", about)
 	bot.AddCommand("/help", help)
+	bot.callbackHandler = menuCallback
 	go bot.start(60)
 	bot.handleUpdates()
 }

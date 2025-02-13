@@ -171,13 +171,13 @@ type Message struct {
 }
 
 type CallbackQuery struct {
-	Id            string                   `json:"id"`
-	From          User                     `json:"from"`
-	Msg           MaybeInaccessibleMessage `json:"message"`
-	InlineMsgId   string                   `json:"inline_message_id"`
-	ChatInstance  string                   `json:"chat_instance"`
-	Data          string                   `json:"data"`
-	GameShortName string                   `json:"game_short_name"`
+	Id            string  `json:"id"`
+	From          User    `json:"from"`
+	Msg           Message `json:"message"` // this is sketchy, coz the real type of this field is MaybeInaccessibleMessage
+	InlineMsgId   string  `json:"inline_message_id"`
+	ChatInstance  string  `json:"chat_instance"`
+	Data          string  `json:"data"`
+	GameShortName string  `json:"game_short_name"`
 }
 
 type MessageOrigin struct {
@@ -304,15 +304,16 @@ type MessageAutoDeleteTimerChanged struct {
 	MessageAutoDeleteTime int64 `json:"message_auto_delete_time"`
 }
 
-type InaccessibleMessage struct {
-	Chat  Chat  `json:"chat"`
-	MsgId int64 `json:"message_id"`
-	Date  int64 `json:"date"`
-}
-type MaybeInaccessibleMessage struct {
-	*Message
-	InaccessibleMessage
-}
+//	type InaccessibleMessage struct {
+//		// Chat  Chat  `json:"chat"`
+//		MsgId int64 `json:"message_id"`
+//		Date  int64 `json:"date"`
+//	}
+//
+//	type MaybeInaccessibleMessage struct {
+//		Message
+//		InaccessibleMessage
+//	}
 type Invoice struct {
 }
 type SuccessfulPayment struct {

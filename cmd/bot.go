@@ -11,14 +11,23 @@ import (
 	"time"
 )
 
+type SendMsgOpts struct {
+	ChatId      int64                 `json:"chat_id"`
+	Text        string                `json:"text"`
+	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"` // has to be a pointer for json serializer to skip it if empty
+}
+
+type CallbackHandler func(CallbackQuery) SendMsgOpts
+type MsgHandler func(Message) SendMsgOpts
+
 type Bot struct {
 	User
-	token        string
-	baseUrl      string
-	updates      chan Update // a channel for passing updates to the handler
-	lastUpdateId int64       // id of last processed update, needed for getUpdates() offset parameter
-	commands     map[string]MsgHandler
-	// queryCallbacks map[string]CallbackHandler
+	token           string
+	baseUrl         string
+	updates         chan Update // a channel for passing updates to the handler
+	lastUpdateId    int64       // id of last processed update, needed for getUpdates() offset parameter
+	commands        map[string]MsgHandler
+	callbackHandler CallbackHandler
 }
 
 func (b Bot) AddCommand(name string, handler MsgHandler) {
@@ -35,8 +44,8 @@ func (b Bot) start(timeout int) {
 		if err != nil {
 			// TODO: make it wait a few seconds and retry
 			fmt.Println(err)
+			continue
 		}
-		defer res.Body.Close()
 		if res.StatusCode != 200 {
 			fmt.Println(errors.New("/getUpdates request: " + res.Status))
 		}
@@ -53,25 +62,27 @@ func (b Bot) start(timeout int) {
 			b.updates <- update
 			b.lastUpdateId = update.Id
 		}
+		res.Body.Close()
 	}
 }
 
-func (b Bot) handleUpdates() error {
+func (b Bot) handleUpdates() {
 	for update := range b.updates {
-		switch {
-		case update.CallbackQuery.Id != "":
-			fmt.Println("Its a callback")
-		case update.Msg.Id != 0:
-			f, ok := b.commands[update.Msg.Text]
-			if ok {
-				go func() {
+		go func() {
+			switch {
+			case update.CallbackQuery.Id != "" && b.callbackHandler != nil:
+				reply := b.callbackHandler(update.CallbackQuery)
+				b.sendMessage(reply)
+				b.answerCallbackQuery(update.CallbackQuery.Id)
+			case update.Msg.Id != 0:
+				f, ok := b.commands[update.Msg.Text]
+				if ok {
 					reply := f(update.Msg)
 					b.sendMessage(reply)
-				}()
+				}
 			}
-		}
+		}()
 	}
-	return nil
 }
 
 func (b Bot) sendMessage(parameters SendMsgOpts) {
@@ -80,16 +91,25 @@ func (b Bot) sendMessage(parameters SendMsgOpts) {
 		fmt.Println("sending failed on serializing message object to json")
 	}
 	url := fmt.Sprintf("%s/sendMessage", b.baseUrl)
-	fmt.Println(bytes.NewReader(data))
 	client := &http.Client{}
 	res, err := client.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
-		fmt.Printf("error on post request: %s", err)
+		fmt.Printf("error on post request: %s\n", err)
+		// TODO: do smth if Telegram gives an error back
+		var j interface{}
+		err = json.NewDecoder(res.Body).Decode(&j)
+		fmt.Println("send message response from telegram: ", j)
 	}
+}
 
-	var j interface{}
-	err = json.NewDecoder(res.Body).Decode(&j)
-	fmt.Println("send message response from telegram: ", j)
+func (b Bot) answerCallbackQuery(callbackQueryId string) {
+	// this function needs to be called to stop buttons from
+	// blinking after they're pressed by the user
+	url := fmt.Sprintf("%s/answerCallbackQuery", b.baseUrl)
+	data := fmt.Sprintf("{\"callback_query_id\":\"%s\"}", callbackQueryId)
+	client := &http.Client{}
+	res, _ := client.Post(url, "application/json", bytes.NewBufferString(data)) //I dont even care about this error, no big deal
+	res.Body.Close()
 }
 
 func createBot(token string) (Bot, error) {
@@ -118,12 +138,4 @@ func createBot(token string) (Bot, error) {
 		updates:  updates,
 		commands: commands}
 	return bot, nil
-}
-
-type CallbackHandler func(CallbackQuery) SendMsgOpts
-type MsgHandler func(Message) SendMsgOpts
-type SendMsgOpts struct {
-	ChatId      int64                 `json:"chat_id"`
-	Text        string                `json:"text"`
-	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"` // has to be a pointer for json serializer to skip it if empty
 }
