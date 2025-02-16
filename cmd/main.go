@@ -17,11 +17,13 @@ func main() {
 		fmt.Println("error: couldn't create a bot", err)
 		return
 	}
-	bot.AddCommand("/start", start)
-	bot.AddCommand("/menu", menu)
-	bot.AddCommand("/about", about)
-	bot.AddCommand("/help", help)
-	bot.callbackHandler = menuCallback
+	cmdHandler := NewCommandHandler()
+	cmdHandler.AddCommand("/start", start)
+	cmdHandler.AddCommand("/menu", menu)
+	cmdHandler.AddCommand("/about", about)
+	cmdHandler.AddCommand("/help", help)
+	bot.commandHandler = cmdHandler
+	bot.callbackHandler = CallbackHandler{}
 	go bot.start(60)
 	bot.handleUpdates()
 }

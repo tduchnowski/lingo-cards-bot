@@ -10,8 +10,13 @@ import (
 	"time"
 )
 
-type CallbackHandler func(CallbackQuery) Responder
-type MsgHandler func(Message) Responder
+type Responder interface {
+	Respond(string) // can be sending a message, editing existing msg etc.
+}
+
+type Handler[T CallbackQuery | Message] interface {
+	GetResponder(T) Responder
+}
 
 type Bot struct {
 	User
@@ -19,13 +24,8 @@ type Bot struct {
 	baseUrl         string
 	updates         chan Update // a channel for passing updates to the handler
 	lastUpdateId    int64       // id of last processed update, needed for getUpdates() offset parameter
-	commands        map[string]MsgHandler
-	callbackHandler CallbackHandler
-}
-
-func (b Bot) AddCommand(name string, handler MsgHandler) {
-	// simply add a command to Bot.commands map
-	b.commands[name] = handler
+	callbackHandler Handler[CallbackQuery]
+	commandHandler  Handler[Message]
 }
 
 func (b Bot) start(timeout int) {
@@ -65,15 +65,10 @@ func (b Bot) handleUpdates() {
 			var response Responder
 			switch {
 			case update.CallbackQuery.Id != "" && b.callbackHandler != nil:
-				response = b.callbackHandler(update.CallbackQuery)
+				response = b.callbackHandler.GetResponder(update.CallbackQuery)
 				go update.CallbackQuery.answer(b.baseUrl)
 			case update.Msg.Id != 0:
-				commandHandler, ok := b.commands[update.Msg.Text]
-				if ok {
-					response = commandHandler(update.Msg)
-				} else {
-					response = SendMsg{}
-				}
+				response = b.commandHandler.GetResponder(update.Msg)
 			}
 			response.Respond(b.baseUrl)
 		}()
@@ -98,12 +93,10 @@ func createBot(token string) (Bot, error) {
 		return Bot{}, err
 	}
 	updates := make(chan Update)
-	commands := make(map[string]MsgHandler)
 	bot := Bot{
-		User:     ur.User,
-		token:    token,
-		baseUrl:  baseUrl,
-		updates:  updates,
-		commands: commands}
+		User:    ur.User,
+		token:   token,
+		baseUrl: baseUrl,
+		updates: updates}
 	return bot, nil
 }

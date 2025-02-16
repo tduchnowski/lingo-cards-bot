@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"net/http"
 )
 
+// TODO: take it from a db
 var supportedLanguages []Language = []Language{
 	{"Polish", "pl"},
 	{"Russian", "ru"},
@@ -22,17 +24,67 @@ type Language struct {
 	code     string
 }
 
-type Responder interface {
-	Respond(string) // can be sending a message, editing existing msg etc.
-}
+type CallbackReply func(CallbackQuery) Responder
+type MsgReply func(Message) Responder
 
 type Responders []Responder
 
-// that makes a list of Responders also a Responder, crazy
+// this makes a list of Responders also a Responder
 func (r Responders) Respond(baseUrl string) {
 	for _, responder := range r {
 		responder.Respond(baseUrl)
 	}
+}
+
+type CommandHandler struct {
+	commands map[string]MsgReply
+	db       *pgx.Conn
+}
+
+func NewCommandHandler() CommandHandler {
+	return CommandHandler{commands: make(map[string]MsgReply)}
+
+}
+
+func (cmdHandler CommandHandler) AddCommand(name string, msgHandler MsgReply) {
+	cmdHandler.commands[name] = msgHandler
+}
+
+func (cmdHandler CommandHandler) GetResponder(msg Message) Responder {
+	msgHandler, ok := cmdHandler.commands[msg.Text]
+	fmt.Println(ok)
+	if !ok {
+		return SendMsg{}
+	}
+	return msgHandler(msg)
+}
+
+type CallbackHandler struct {
+	db *pgx.Conn
+}
+
+func (callbackHandler CallbackHandler) GetResponder(cq CallbackQuery) Responder {
+	if cq.Msg.Id != 0 {
+		var callbackData MenuCallbackData
+		err := json.Unmarshal([]byte(cq.Data), &callbackData)
+		if err != nil {
+			fmt.Println(err)
+			return SendMsg{}
+		}
+		switch callbackData.Stage {
+		case 0:
+			return EditMsg{
+				ChatId:      cq.Msg.Chat.Id,
+				Text:        "Now choose the difficulty (how common or rare are the words)",
+				ReplyMarkup: chooseLevelKeyboardMarkup(callbackData.Language),
+				MsgId:       cq.Msg.Id}
+		case 1:
+			dm := DeleteMsg{ChatId: cq.Msg.Chat.Id, MsgId: cq.Msg.Id}
+			sm := nextWord(cq, callbackData.Language, callbackData.Difficulty)
+			return Responders{dm, sm}
+		}
+	}
+	return SendMsg{}
 }
 
 type SendMsg struct {
@@ -41,6 +93,7 @@ type SendMsg struct {
 	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"` // has to be a pointer for json serializer to skip it if empty
 }
 
+// TODO: do it with more generic type instead of Responder
 func postRequest(baseUrl string, method string, r Responder) {
 	data, err := json.Marshal(r)
 	if err != nil {
@@ -116,28 +169,33 @@ func help(msg Message) Responder {
 	return SendMsg{ChatId: msg.Chat.Id, Text: text}
 }
 
-func menuCallback(callback CallbackQuery) Responder {
-	if callback.Msg.Id != 0 {
-		var callbackData MenuCallbackData
-		err := json.Unmarshal([]byte(callback.Data), &callbackData)
-		if err != nil {
-			fmt.Println(err)
-			return SendMsg{}
-		}
-		switch callbackData.Stage {
-		case 0:
-			return EditMsg{
-				ChatId:      callback.Msg.Chat.Id,
-				Text:        "Now choose the difficulty (how common or rare are the words)",
-				ReplyMarkup: chooseLevelKeyboardMarkup(callbackData.Language),
-				MsgId:       callback.Msg.Id}
-		case 1:
-			dm := DeleteMsg{ChatId: callback.Msg.Chat.Id, MsgId: callback.Msg.Id}
-			sm := SendMsg{ChatId: callback.Msg.Chat.Id, Text: "Fetching data from my database"}
-			return Responders{dm, sm}
-		}
-	}
-	return SendMsg{}
+// func menuCallback(callback CallbackQuery) Responder {
+// 	if callback.Msg.Id != 0 {
+// 		var callbackData MenuCallbackData
+// 		err := json.Unmarshal([]byte(callback.Data), &callbackData)
+// 		if err != nil {
+// 			fmt.Println(err)
+// 			return SendMsg{}
+// 		}
+// 		switch callbackData.Stage {
+// 		case 0:
+// 			return EditMsg{
+// 				ChatId:      callback.Msg.Chat.Id,
+// 				Text:        "Now choose the difficulty (how common or rare are the words)",
+// 				ReplyMarkup: chooseLevelKeyboardMarkup(callbackData.Language),
+// 				MsgId:       callback.Msg.Id}
+// 		case 1:
+// 			dm := DeleteMsg{ChatId: callback.Msg.Chat.Id, MsgId: callback.Msg.Id}
+// 			sm := nextWord(callback, callbackData.Language, callbackData.Difficulty)
+// 			return Responders{dm, sm}
+// 		}
+// 	}
+// 	return SendMsg{}
+// }
+
+func nextWord(callbackQuery CallbackQuery, langCode string, difficulty uint8) SendMsg {
+	// query db for a random word in a given difficulty and language
+	return SendMsg{ChatId: callbackQuery.Msg.Chat.Id, Text: "Fetching data from my database"}
 }
 
 func (cq CallbackQuery) answer(baseUrl string) {
