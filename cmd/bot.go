@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,14 +10,8 @@ import (
 	"time"
 )
 
-type SendMsgOpts struct {
-	ChatId      int64                 `json:"chat_id"`
-	Text        string                `json:"text"`
-	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"` // has to be a pointer for json serializer to skip it if empty
-}
-
-type CallbackHandler func(CallbackQuery) SendMsgOpts
-type MsgHandler func(Message) SendMsgOpts
+type CallbackHandler func(CallbackQuery) Responder
+type MsgHandler func(Message) Responder
 
 type Bot struct {
 	User
@@ -69,47 +62,22 @@ func (b Bot) start(timeout int) {
 func (b Bot) handleUpdates() {
 	for update := range b.updates {
 		go func() {
+			var response Responder
 			switch {
 			case update.CallbackQuery.Id != "" && b.callbackHandler != nil:
-				reply := b.callbackHandler(update.CallbackQuery)
-				b.sendMessage(reply)
-				b.answerCallbackQuery(update.CallbackQuery.Id)
+				response = b.callbackHandler(update.CallbackQuery)
+				go update.CallbackQuery.answer(b.baseUrl)
 			case update.Msg.Id != 0:
-				f, ok := b.commands[update.Msg.Text]
+				commandHandler, ok := b.commands[update.Msg.Text]
 				if ok {
-					reply := f(update.Msg)
-					b.sendMessage(reply)
+					response = commandHandler(update.Msg)
+				} else {
+					response = SendMsg{}
 				}
 			}
+			response.Respond(b.baseUrl)
 		}()
 	}
-}
-
-func (b Bot) sendMessage(parameters SendMsgOpts) {
-	data, err := json.Marshal(parameters)
-	if err != nil {
-		fmt.Println("sending failed on serializing message object to json")
-	}
-	url := fmt.Sprintf("%s/sendMessage", b.baseUrl)
-	client := &http.Client{}
-	res, err := client.Post(url, "application/json", bytes.NewBuffer(data))
-	if err != nil {
-		fmt.Printf("error on post request: %s\n", err)
-		// TODO: do smth if Telegram gives an error back
-		var j interface{}
-		err = json.NewDecoder(res.Body).Decode(&j)
-		fmt.Println("send message response from telegram: ", j)
-	}
-}
-
-func (b Bot) answerCallbackQuery(callbackQueryId string) {
-	// this function needs to be called to stop buttons from
-	// blinking after they're pressed by the user
-	url := fmt.Sprintf("%s/answerCallbackQuery", b.baseUrl)
-	data := fmt.Sprintf("{\"callback_query_id\":\"%s\"}", callbackQueryId)
-	client := &http.Client{}
-	res, _ := client.Post(url, "application/json", bytes.NewBufferString(data)) //I dont even care about this error, no big deal
-	res.Body.Close()
 }
 
 func createBot(token string) (Bot, error) {
