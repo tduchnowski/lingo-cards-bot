@@ -2,10 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5"
 	"net/http"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // TODO: take it from a db
@@ -36,63 +40,6 @@ func (r Responders) Respond(baseUrl string) {
 	}
 }
 
-type CommandHandler struct {
-	commands map[string]MsgReply
-	db       *pgx.Conn
-}
-
-func NewCommandHandler() CommandHandler {
-	return CommandHandler{commands: make(map[string]MsgReply)}
-
-}
-
-func (cmdHandler CommandHandler) AddCommand(name string, msgHandler MsgReply) {
-	cmdHandler.commands[name] = msgHandler
-}
-
-func (cmdHandler CommandHandler) GetResponder(msg Message) Responder {
-	msgHandler, ok := cmdHandler.commands[msg.Text]
-	fmt.Println(ok)
-	if !ok {
-		return SendMsg{}
-	}
-	return msgHandler(msg)
-}
-
-type CallbackHandler struct {
-	db *pgx.Conn
-}
-
-func (callbackHandler CallbackHandler) GetResponder(cq CallbackQuery) Responder {
-	if cq.Msg.Id != 0 {
-		var callbackData MenuCallbackData
-		err := json.Unmarshal([]byte(cq.Data), &callbackData)
-		if err != nil {
-			fmt.Println(err)
-			return SendMsg{}
-		}
-		switch callbackData.Stage {
-		case 0:
-			return EditMsg{
-				ChatId:      cq.Msg.Chat.Id,
-				Text:        "Now choose the difficulty (how common or rare are the words)",
-				ReplyMarkup: chooseLevelKeyboardMarkup(callbackData.Language),
-				MsgId:       cq.Msg.Id}
-		case 1:
-			dm := DeleteMsg{ChatId: cq.Msg.Chat.Id, MsgId: cq.Msg.Id}
-			sm := nextWord(cq, callbackData.Language, callbackData.Difficulty)
-			return Responders{dm, sm}
-		}
-	}
-	return SendMsg{}
-}
-
-type SendMsg struct {
-	ChatId      int64                 `json:"chat_id"`
-	Text        string                `json:"text"`
-	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"` // has to be a pointer for json serializer to skip it if empty
-}
-
 // TODO: do it with more generic type instead of Responder
 func postRequest(baseUrl string, method string, r Responder) {
 	data, err := json.Marshal(r)
@@ -114,6 +61,102 @@ func postRequest(baseUrl string, method string, r Responder) {
 	if err != nil {
 		fmt.Println("serializing error: ", err)
 	}
+	fmt.Println(j)
+}
+
+type CommandHandler struct {
+	commands map[string]MsgReply
+}
+
+func NewCommandHandler() CommandHandler {
+	return CommandHandler{commands: make(map[string]MsgReply)}
+}
+
+func (cmdHandler CommandHandler) AddCommand(name string, msgHandler MsgReply) {
+	cmdHandler.commands[name] = msgHandler
+}
+
+func (cmdHandler CommandHandler) GetResponder(msg Message) Responder {
+	msgHandler, ok := cmdHandler.commands[msg.Text]
+	fmt.Println(ok)
+	if !ok {
+		return SendMsg{}
+	}
+	return msgHandler(msg)
+}
+
+type CallbackHandler struct {
+	db *pgxpool.Pool
+}
+
+func (callbackHandler CallbackHandler) GetResponder(cq CallbackQuery) Responder {
+	if cq.Msg.Id != 0 {
+		var callbackData MenuCallbackData
+		err := json.Unmarshal([]byte(cq.Data), &callbackData)
+		if err != nil {
+			fmt.Println(err)
+			return SendMsg{}
+		}
+		switch callbackData.Stage {
+		case 0:
+			return EditMsg{
+				ChatId:      cq.Msg.Chat.Id,
+				Text:        "Now choose the difficulty (how common or rare are the words)",
+				ReplyMarkup: chooseLevelKeyboardMarkup(callbackData.Language),
+				MsgId:       cq.Msg.Id}
+		case 1:
+			dm := DeleteMsg{ChatId: cq.Msg.Chat.Id, MsgId: cq.Msg.Id}
+			sm := callbackHandler.nextWord(cq.Msg.Chat.Id, callbackData)
+			return Responders{dm, sm}
+		case 2:
+			return callbackHandler.nextWord(cq.Msg.Chat.Id, callbackData)
+		}
+	}
+	return SendMsg{}
+}
+
+// TODO: parameters can be different, I only need ChatId and CallbackData to generate a response for this
+func (callbackHandler CallbackHandler) nextWord(chatId int64, data MenuCallbackData) Responder {
+	tableName := fmt.Sprintf("words_%s", data.Language)
+	fmt.Println("table name: ", tableName)
+	var rowCount int
+	query := fmt.Sprintf("SELECT COUNT(id) FROM %s", tableName)
+	err := callbackHandler.db.QueryRow(context.TODO(), query).Scan(&rowCount)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if rowCount == 0 {
+		return SendMsg{ChatId: chatId, Text: "no words for this language and difficulty level, yet. try again later or choose a different level"}
+	}
+	query = fmt.Sprintf("SELECT * FROM %s ORDER BY RANDOM() LIMIT 1", tableName)
+	rows, err := callbackHandler.db.Query(context.TODO(), query)
+	if err != nil {
+		fmt.Println(err)
+		return SendMsg{}
+	}
+	words, err := pgx.CollectRows(rows, pgx.RowToStructByName[WordEntry])
+	if err != nil {
+		fmt.Println(err)
+	}
+	if len(words) == 0 {
+		return SendMsg{ChatId: chatId, Text: "no words for this language and difficulty level, yet. try again later or choose a different level"}
+	}
+	word := words[0]
+	text, err := formatWordMsg(word)
+	fmt.Println(word)
+	// TODO: on error retry a few times to get a valid word
+	if err != nil {
+		return SendMsg{}
+	}
+	var parseMode string = "MarkdownV2"
+	return SendMsg{ChatId: chatId, Text: text, ParseMode: &parseMode, ReplyMarkup: nextWordKeyboardMarkup(data)}
+}
+
+type SendMsg struct {
+	ChatId      int64                 `json:"chat_id"`
+	Text        string                `json:"text"`
+	ParseMode   *string               `json:"parse_mode,omitempty"`   // pointer for omitempty to skip it if its not present
+	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"` // pointer for omitempty to skip it if its not present
 }
 
 func (sm SendMsg) Respond(baseUrl string) {
@@ -169,33 +212,27 @@ func help(msg Message) Responder {
 	return SendMsg{ChatId: msg.Chat.Id, Text: text}
 }
 
-// func menuCallback(callback CallbackQuery) Responder {
-// 	if callback.Msg.Id != 0 {
-// 		var callbackData MenuCallbackData
-// 		err := json.Unmarshal([]byte(callback.Data), &callbackData)
-// 		if err != nil {
-// 			fmt.Println(err)
-// 			return SendMsg{}
-// 		}
-// 		switch callbackData.Stage {
-// 		case 0:
-// 			return EditMsg{
-// 				ChatId:      callback.Msg.Chat.Id,
-// 				Text:        "Now choose the difficulty (how common or rare are the words)",
-// 				ReplyMarkup: chooseLevelKeyboardMarkup(callbackData.Language),
-// 				MsgId:       callback.Msg.Id}
-// 		case 1:
-// 			dm := DeleteMsg{ChatId: callback.Msg.Chat.Id, MsgId: callback.Msg.Id}
-// 			sm := nextWord(callback, callbackData.Language, callbackData.Difficulty)
-// 			return Responders{dm, sm}
-// 		}
-// 	}
-// 	return SendMsg{}
-// }
+func formatWordMsg(word WordEntry) (string, error) {
+	//check all nil pointers
+	if word.Lemma == nil || word.Meaning == nil {
+		errorMsg := fmt.Sprint("some fields of ", word, "are nil and cannot be displayed")
+		return "", errors.New(errorMsg)
+	}
+	var usage string
+	var partOfSpeech string
+	if word.Usage == nil {
+		usage = "no examples provided yet"
+	} else {
+		usage = *word.Usage
+	}
+	if word.PartOfSpeech == nil {
+		partOfSpeech = "this information is not available yet"
+	} else {
+		partOfSpeech = *word.PartOfSpeech
+	}
 
-func nextWord(callbackQuery CallbackQuery, langCode string, difficulty uint8) SendMsg {
-	// query db for a random word in a given difficulty and language
-	return SendMsg{ChatId: callbackQuery.Msg.Chat.Id, Text: "Fetching data from my database"}
+	return fmt.Sprintf("%s\n\n*Meaning:*|| %s||\n\n*Examples:*\n||%s||\n\n_Part of speech:_|| %s||", *word.Lemma, *word.Meaning, usage, partOfSpeech), nil
+
 }
 
 func (cq CallbackQuery) answer(baseUrl string) {
@@ -233,5 +270,17 @@ func chooseLevelKeyboardMarkup(langCode string) *InlineKeyboardMarkup {
 		}
 		keyboard[i] = []InlineKeyboardButton{{Text: difficultyToString[uint8(i)], CallbackData: string(callbackData)}}
 	}
+	return &InlineKeyboardMarkup{InlineKeyboard: keyboard}
+}
+
+func nextWordKeyboardMarkup(data MenuCallbackData) *InlineKeyboardMarkup {
+	keyboard := make([][]InlineKeyboardButton, 1)
+	data.Stage = 2
+	dataJson, err := json.Marshal(data)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(dataJson)
+	keyboard[0] = []InlineKeyboardButton{{Text: "Next", CallbackData: string(dataJson)}}
 	return &InlineKeyboardMarkup{InlineKeyboard: keyboard}
 }
