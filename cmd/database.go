@@ -10,12 +10,19 @@ type WordEntry struct {
 	Id           int64   `db:"id"`
 	Word         string  `db:"word"`
 	LangCode     string  `db:"lang_code"`
-	Language     string  `db:"language"`
 	Meaning      *string `db:"meaning"`
 	Lemma        *string `db:"lemma"`
-	Usage        *string `db:"usage"`
-	PartOfSpeech *string `db:"part_of_speech"`
-	Frequency    int     `db:"frequency"`
+	LemmaMeaning *string `db:"lemma_meaning"`
+	Sentences    *string `db:"sentences"`
+}
+
+type Example struct {
+	Sentence    string `xml:"sentence"`
+	Translation string `xml:"translation"`
+}
+
+type Examples struct {
+	Sentences []Example `xml:"example"`
 }
 
 func createConnection(url string) (*pgxpool.Pool, error) {

@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -61,6 +63,7 @@ func postRequest(baseUrl string, method string, r Responder) {
 	if err != nil {
 		fmt.Println("serializing error: ", err)
 	}
+	fmt.Println("response from telegram")
 	fmt.Println(j)
 }
 
@@ -118,7 +121,6 @@ func (callbackHandler CallbackHandler) GetResponder(cq CallbackQuery) Responder 
 // TODO: parameters can be different, I only need ChatId and CallbackData to generate a response for this
 func (callbackHandler CallbackHandler) nextWord(chatId int64, data MenuCallbackData) Responder {
 	tableName := fmt.Sprintf("words_%s", data.Language)
-	fmt.Println("table name: ", tableName)
 	var rowCount int
 	query := fmt.Sprintf("SELECT COUNT(id) FROM %s", tableName)
 	err := callbackHandler.db.QueryRow(context.TODO(), query).Scan(&rowCount)
@@ -143,7 +145,6 @@ func (callbackHandler CallbackHandler) nextWord(chatId int64, data MenuCallbackD
 	}
 	word := words[0]
 	text, err := formatWordMsg(word)
-	fmt.Println(word)
 	// TODO: on error retry a few times to get a valid word
 	if err != nil {
 		return SendMsg{}
@@ -218,21 +219,44 @@ func formatWordMsg(word WordEntry) (string, error) {
 		errorMsg := fmt.Sprint("some fields of ", word, "are nil and cannot be displayed")
 		return "", errors.New(errorMsg)
 	}
-	var usage string
-	var partOfSpeech string
-	if word.Usage == nil {
-		usage = "no examples provided yet"
+	header := fmt.Sprintf("*%s*", word.Word)
+	meaning := fmt.Sprintf("*meaning:* %s", *word.Meaning)
+	var sentences string
+	if word.Sentences == nil {
+		sentences = ""
 	} else {
-		usage = *word.Usage
+		sentences = fmt.Sprintf("*examples of sentences:*\n\n%s", formatExamples(*word.Sentences))
 	}
-	if word.PartOfSpeech == nil {
-		partOfSpeech = "this information is not available yet"
-	} else {
-		partOfSpeech = *word.PartOfSpeech
+	formattedWord := fmt.Sprintf("\n%s\n\n||%s\n\n%s||\n\n", header, meaning, sentences)
+	formattedWord = strings.Replace(formattedWord, ".", "\\.", -1)
+	formattedWord = strings.Replace(formattedWord, "-", "\\-", -1)
+	return formattedWord, nil
+}
+
+func formatExamples(examplesRaw string) string {
+	// the examples in the database are of this form:
+	// <example><sentence>...</sentence><translation>...</translation></example><example><sentence>...</sentence><translation></translation>...</example>
+	// this function transforms it into a string like that:
+	//
+	// Examples of sentences
+	// sentence 1
+	// translation 1
+	//
+	// sentence 2
+	// translation 2
+	// ...
+	xmlString := fmt.Sprintf("<examples>%s</examples>", examplesRaw) // have to wrap it in a root element for Unmarshaling
+	var examples Examples
+	err := xml.Unmarshal([]byte(xmlString), &examples)
+	if err != nil {
+		fmt.Println(err)
 	}
-
-	return fmt.Sprintf("%s\n\n*Meaning:*|| %s||\n\n*Examples:*\n||%s||\n\n_Part of speech:_|| %s||", *word.Lemma, *word.Meaning, usage, partOfSpeech), nil
-
+	examplesSize := len(examples.Sentences)
+	examplesFormatted := make([]string, examplesSize)
+	for i := 0; i < examplesSize; i++ {
+		examplesFormatted[i] = fmt.Sprintf("%s\n_%s_", examples.Sentences[i].Sentence, examples.Sentences[i].Translation)
+	}
+	return strings.Join(examplesFormatted, "\n\n")
 }
 
 func (cq CallbackQuery) answer(baseUrl string) {
@@ -280,7 +304,6 @@ func nextWordKeyboardMarkup(data MenuCallbackData) *InlineKeyboardMarkup {
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println(dataJson)
 	keyboard[0] = []InlineKeyboardButton{{Text: "Next", CallbackData: string(dataJson)}}
 	return &InlineKeyboardMarkup{InlineKeyboard: keyboard}
 }
