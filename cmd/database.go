@@ -7,12 +7,8 @@ import (
 )
 
 type WordEntry struct {
-	Id           int64   `db:"id"`
-	Word         string  `db:"word"`
-	LangCode     string  `db:"lang_code"`
-	Meaning      *string `db:"meaning"`
-	Lemma        *string `db:"lemma"`
-	LemmaMeaning *string `db:"lemma_meaning"`
+	Lemma        string  `db:"lemma"`
+	LemmaMeaning string  `db:"lemma_meaning"`
 	Sentences    *string `db:"sentences"`
 }
 

@@ -34,12 +34,9 @@ func main() {
 		return
 	}
 	// bot handlers
-	cmdHandler := NewCommandHandler()
-	cmdHandler.AddCommand("/start", start)
-	cmdHandler.AddCommand("/menu", menu)
-	cmdHandler.AddCommand("/about", about)
-	cmdHandler.AddCommand("/help", help)
-	bot.commandHandler = cmdHandler
+	// TODO: check if theres no nil pointer dereferencing
+	// or anything weird in case there are no handlers provided
+	bot.commandHandler = CommandHandler{db: db}
 	bot.callbackHandler = CallbackHandler{db: db}
 	go bot.start(60)
 	bot.handleUpdates()

@@ -60,7 +60,7 @@ type Update struct {
 	// Poll                    Poll                        `json:"poll"`
 	// PollAnswer              PollAnswer                  `json:"poll_answer"`
 	// MyChatMember    ChatMemberUpdated `json:"my_chat_member"`
-	// ChatMember      ChatMemberUpdated `json:"chat_member"`
+	ChatMember ChatMemberUpdated `json:"chat_member"`
 	// ChatJoinRequest ChatJoinRequest   `json:"chat_join_request"`
 	// ChatBoost               ChatBoost                   `json:"chat_boost"`
 	// RemovedChatBoost        ChatBoostRemoved            `json:"removed_chat_boost"`
@@ -80,6 +80,23 @@ type ChatFullInfo struct {
 	ActiveUsernames  []string      `json:"active_usernames"`
 	Birthdate        Birthdate     `json:"birthdate"`
 	BusinessIntro    BusinessIntro `json:"business_intro"`
+}
+
+type ChatMember struct {
+}
+
+type ChatInviteLink struct {
+}
+
+type ChatMemberUpdated struct {
+	Chat                    Chat           `json:"chat"`
+	From                    User           `json:"from"`
+	Date                    int64          `json:"date"`
+	OldChatMember           ChatMember     `json:"chat_member"`
+	NewChatMember           ChatMember     `json:"new_chat_member"`
+	InviteLink              ChatInviteLink `json:"invite_link"`
+	ViaJoinRequest          bool           `json:"via_join_request"`
+	ViaChatFolderInviteLink bool           `json:"via_chat_folder_invite_link"`
 }
 
 type Message struct {
@@ -265,8 +282,7 @@ type ChatBoostRemoved struct {
 }
 type ChatJoinRequest struct {
 }
-type ChatMemberUpdated struct {
-}
+
 type PaidMediaPurchased struct {
 }
 type Game struct {

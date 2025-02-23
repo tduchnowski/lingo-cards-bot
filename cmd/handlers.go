@@ -5,30 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-// TODO: take it from a db
-var supportedLanguages []Language = []Language{
-	{"Polish", "pl"},
-	{"Russian", "ru"},
-	{"Italian", "it"}}
-
-var difficultyToString map[uint8]string = map[uint8]string{
-	0: "Most frequent words",
-	1: "Pretty common words",
-	2: "Less common words"}
-
-type Language struct {
-	fullName string
-	code     string
-}
 
 type CallbackReply func(CallbackQuery) Responder
 type MsgReply func(Message) Responder
@@ -68,28 +52,38 @@ func postRequest(baseUrl string, method string, r Responder) {
 }
 
 type CommandHandler struct {
-	commands map[string]MsgReply
+	db *pgxpool.Pool
 }
 
-func NewCommandHandler() CommandHandler {
-	return CommandHandler{commands: make(map[string]MsgReply)}
-}
-
-func (cmdHandler CommandHandler) AddCommand(name string, msgHandler MsgReply) {
-	cmdHandler.commands[name] = msgHandler
+func NewCommandHandler(db *pgxpool.Pool) CommandHandler {
+	return CommandHandler{db: db}
 }
 
 func (cmdHandler CommandHandler) GetResponder(msg Message) Responder {
-	msgHandler, ok := cmdHandler.commands[msg.Text]
-	fmt.Println(ok)
-	if !ok {
-		return SendMsg{}
+	switch msg.Text {
+	case "/start":
+		return start(msg, cmdHandler.db)
+	case "/menu":
+		return menu(msg, cmdHandler.db)
+	case "/about":
+		return about(msg)
+	case "/help":
+		return help(msg)
 	}
-	return msgHandler(msg)
+	return SendMsg{}
 }
 
 type CallbackHandler struct {
 	db *pgxpool.Pool
+}
+
+func NewCallbackHandler(db *pgxpool.Pool) (CallbackHandler, error) {
+	// supportedLangs, err := getSupportedLanguages(db)
+	// if err != nil {
+	// 	fmt.Println("could not initiate CallbackHandler")
+	// 	return CallbackHandler{}, err
+	// }
+	return CallbackHandler{db}, nil
 }
 
 func (callbackHandler CallbackHandler) GetResponder(cq CallbackQuery) Responder {
@@ -118,11 +112,10 @@ func (callbackHandler CallbackHandler) GetResponder(cq CallbackQuery) Responder 
 	return SendMsg{}
 }
 
-// TODO: parameters can be different, I only need ChatId and CallbackData to generate a response for this
 func (callbackHandler CallbackHandler) nextWord(chatId int64, data MenuCallbackData) Responder {
-	tableName := fmt.Sprintf("words_%s", data.Language)
+	tableName := fmt.Sprintf("words_%s_%s", data.Language, strconv.Itoa(int(data.Difficulty)))
 	var rowCount int
-	query := fmt.Sprintf("SELECT COUNT(id) FROM %s", tableName)
+	query := fmt.Sprintf("SELECT COUNT(lemma) FROM %s", tableName)
 	err := callbackHandler.db.QueryRow(context.TODO(), query).Scan(&rowCount)
 	if err != nil {
 		fmt.Println(err)
@@ -172,7 +165,6 @@ type EditMsg struct {
 	MsgId       int64                 `json:"message_id"`             // id of a message to edit
 }
 
-// TODO: refactor, coz this is a duplicated code except for two variables
 func (em EditMsg) Respond(baseUrl string) {
 	postRequest(baseUrl, "editMessageText", em)
 }
@@ -192,15 +184,29 @@ type MenuCallbackData struct {
 	Difficulty uint8  `json:"difficulty"`
 }
 
-func start(msg Message) Responder {
+func start(msg Message, db *pgxpool.Pool) Responder {
 	text := "Welcome"
 	// TODO: saving a user to the database
+	// check if this is a group or private chat
+	username := msg.Chat.Username
+	if username != "" {
+		err := createOrUpdatePrivateChat(db, username, msg.Chat.Id)
+		if err != nil {
+			fmt.Printf("couldn't update user %s to in a database", username)
+			fmt.Println(err)
+		}
+	}
 	return SendMsg{ChatId: msg.Chat.Id, Text: text}
 }
 
-func menu(msg Message) Responder {
-	text := "Choose a language:"
-	return SendMsg{ChatId: msg.Chat.Id, Text: text, ReplyMarkup: chooseLanguageKeyboardMarkup()}
+func menu(msg Message, db *pgxpool.Pool) Responder {
+	text := "Choose a language"
+	supportedLangs, err := getSupportedLanguages(db)
+	if err != nil {
+		fmt.Println(err)
+		return SendMsg{}
+	}
+	return SendMsg{ChatId: msg.Chat.Id, Text: text, ReplyMarkup: chooseLanguageKeyboardMarkup(supportedLangs)}
 }
 
 func about(msg Message) Responder {
@@ -215,12 +221,8 @@ func help(msg Message) Responder {
 
 func formatWordMsg(word WordEntry) (string, error) {
 	//check all nil pointers
-	if word.Lemma == nil || word.Meaning == nil {
-		errorMsg := fmt.Sprint("some fields of ", word, "are nil and cannot be displayed")
-		return "", errors.New(errorMsg)
-	}
-	header := fmt.Sprintf("*%s*", word.Word)
-	meaning := fmt.Sprintf("*meaning:* %s", *word.Meaning)
+	header := fmt.Sprintf("*%s*", word.Lemma)
+	meaning := fmt.Sprintf("*meaning:* %s", word.LemmaMeaning)
 	var sentences string
 	if word.Sentences == nil {
 		sentences = ""
@@ -228,8 +230,7 @@ func formatWordMsg(word WordEntry) (string, error) {
 		sentences = fmt.Sprintf("*examples of sentences:*\n\n%s", formatExamples(*word.Sentences))
 	}
 	formattedWord := fmt.Sprintf("\n%s\n\n||%s\n\n%s||\n\n", header, meaning, sentences)
-	formattedWord = strings.Replace(formattedWord, ".", "\\.", -1)
-	formattedWord = strings.Replace(formattedWord, "-", "\\-", -1)
+	formattedWord = excapeChars(formattedWord)
 	return formattedWord, nil
 }
 
@@ -245,13 +246,16 @@ func formatExamples(examplesRaw string) string {
 	// sentence 2
 	// translation 2
 	// ...
+
 	xmlString := fmt.Sprintf("<examples>%s</examples>", examplesRaw) // have to wrap it in a root element for Unmarshaling
 	var examples Examples
 	err := xml.Unmarshal([]byte(xmlString), &examples)
 	if err != nil {
 		fmt.Println(err)
 	}
-	examplesSize := len(examples.Sentences)
+	maxShownExamples := 3
+	shuffleSlice(examples.Sentences, maxShownExamples)
+	examplesSize := min(len(examples.Sentences), maxShownExamples)
 	examplesFormatted := make([]string, examplesSize)
 	for i := 0; i < examplesSize; i++ {
 		examplesFormatted[i] = fmt.Sprintf("%s\n_%s_", examples.Sentences[i].Sentence, examples.Sentences[i].Translation)
@@ -269,16 +273,17 @@ func (cq CallbackQuery) answer(baseUrl string) {
 	res.Body.Close()
 }
 
-func chooseLanguageKeyboardMarkup() *InlineKeyboardMarkup {
-	buttonsNum := len(supportedLanguages)
+func chooseLanguageKeyboardMarkup(languages []Language) *InlineKeyboardMarkup {
+	buttonsNum := len(languages)
 	keyboard := make([][]InlineKeyboardButton, buttonsNum)
-	for i, lang := range supportedLanguages {
+	for i, lang := range languages {
 		data := MenuCallbackData{Stage: 0, Language: lang.code}
 		callbackData, err := json.Marshal(data)
 		if err != nil {
 			fmt.Println(err)
 		}
 		keyboard[i] = []InlineKeyboardButton{{Text: lang.fullName, CallbackData: string(callbackData)}}
+		i++
 	}
 	return &InlineKeyboardMarkup{InlineKeyboard: keyboard}
 }

@@ -1,0 +1,18 @@
+{
+  "chat": {
+    "base_url": "https://api.openai.com/v1",
+    "api_key":"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",
+    "model":"gpt-4o-mini"
+  },
+  "max_words_per_wordlist": 5000,
+  "batch_size": 10,
+  "wordlists": [
+    {
+      "language": "Italian",
+      "lang_code": "it",
+      "wordlist_path":"./output/it/it_50k_unprocessed_batch7.csv",
+      "output_path": "./output/it/it_50k_translated_batch8.json",
+      "unprocessed_words_path": "./output/it/it_50k_unprocessed_batch8.csv"
+    }
+  ]
+}

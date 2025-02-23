@@ -37,6 +37,7 @@ func (b Bot) start(timeout int) {
 		if err != nil {
 			// TODO: make it wait a few seconds and retry
 			fmt.Println(err)
+			time.Sleep(5 * time.Second)
 			continue
 		}
 		if res.StatusCode != 200 {
@@ -66,16 +67,21 @@ func (b Bot) handleUpdates() {
 			switch {
 			case update.CallbackQuery.Id != "" && b.callbackHandler != nil:
 				response = b.callbackHandler.GetResponder(update.CallbackQuery)
-				go update.CallbackQuery.answer(b.baseUrl)
+				update.CallbackQuery.answer(b.baseUrl)
 			case update.Msg.Id != 0:
 				response = b.commandHandler.GetResponder(update.Msg)
+			default:
+				// do nothing if the bot can't handle this message type
+				response = SendMsg{}
 			}
+			// TODO: updating lastUpdateId should be somewhere here
 			response.Respond(b.baseUrl)
 		}()
 	}
 }
 
 func createBot(token string) (Bot, error) {
+	// TODO: pass handlers here and check if they're nil
 	baseUrl := os.Getenv("TG_BOT_URL") + token
 	getMeUrl := baseUrl + "/getMe"
 	res, err := http.Get(getMeUrl)
