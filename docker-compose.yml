@@ -4,7 +4,7 @@ services:
       context: ./cmd
       dockerfile: Dockerfile
     environment:
-      BOT_TOKEN: 6656048003:AAF9cTAOI8uTzMAQWtSr2L-WGCQE1Vw8fII 
+      BOT_TOKEN: token
       TG_BOT_URL: https://api.telegram.org/bot
       BOT_DB_HOST: db
       BOT_DB_PORT: 5432
