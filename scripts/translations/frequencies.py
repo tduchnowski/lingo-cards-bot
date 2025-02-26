@@ -7,13 +7,23 @@ WordFreq = namedtuple('WordFreq', ['word', 'freq'])
 def extract_freqs(path):
     with open(path) as f:
         lines = f.read()
-    pattern = r"^\d+\t(.+)\t(\d+)$"
+    # pattern = r"^\d+\t(.+)\t(\d+)$"
+    pattern = r"^(.+) (\d+)$"
     p = re.compile(pattern, re.MULTILINE)
     return [WordFreq(m[0], int(m[1])) for m in p.findall(lines)]
 
+def extract_csv(path):
+    with open(path) as f:
+        lines = f.read()
+    # pattern = r"^\d+\t(.+)\t(\d+)$"
+    pattern = r"^[\"]?(.+)[\"]?,[\"]?(\d+)[\"]?$"
+    p = re.compile(pattern, re.MULTILINE)
+    return [WordFreq(m[0].replace('"', ""), int(m[1])) for m in p.findall(lines)]
+
+
 def is_word_invalid(word):
     # I don't want short words
-    if len(word) < 4:
+    if len(word) < 3:
         return True
     if any(chr.isdigit() for chr in word):
         return True

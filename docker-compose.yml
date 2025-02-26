@@ -1,4 +1,21 @@
 services:
+  bot:
+    build:
+      context: ./cmd
+      dockerfile: Dockerfile
+    environment:
+      BOT_TOKEN: 6656048003:AAF9cTAOI8uTzMAQWtSr2L-WGCQE1Vw8fII 
+      TG_BOT_URL: https://api.telegram.org/bot
+      BOT_DB_HOST: db
+      BOT_DB_PORT: 5432
+      BOT_DB_USER: postgres
+      BOT_DB_PASSWORD: postgres
+      BOT_DB_NAME: bot
+    depends_on:
+      - db
+    volumes:
+      - "bot-logs:/bot-logs"
+
   db:
     build:
       context: ./postgres
@@ -12,13 +29,6 @@ services:
     volumes:
       - "postgres-data:/var/lib/postgresql/data"
 
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    environment:
-      PGADMIN_DEFAULT_EMAIL: entidzow@gmail.com
-      PGADMIN_DEFAULT_PASSWORD: pgadmin
-    ports:
-      - "8080:80"
-
 volumes:
   postgres-data:
+  bot-logs:

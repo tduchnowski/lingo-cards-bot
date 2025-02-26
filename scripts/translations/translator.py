@@ -1,4 +1,6 @@
-from openai import OpenAI, APIConnectionError
+import json
+from threading import Lock
+from openai import OpenAI, APIConnectionError, RateLimitError
 
 
 class ChatError(Exception):
@@ -16,10 +18,12 @@ class Chat:
             raise ChatError(f"Failed to initialize {self}. Connection error.")
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
+        self.prompt_tokens_mutex = Lock()
 
     def __repr__(self):
         return f"Chat(base_url={self.base_url}, api_key={self.api_key}, model={self.model})"
 
+    # TODO: do smth about rate limits
     def __call__(self, prompt):
         try:
             response = self.client.chat.completions.create(
@@ -29,12 +33,19 @@ class Chat:
                 ],
                 stream=False
             )
-            if response.usage is not None: # to avoid LSPs 'prompt_tokens is not a known attribute of None'
-                self.total_prompt_tokens += response.usage.prompt_tokens
-                self.total_completion_tokens += response.usage.completion_tokens
-                return response
+            if response.usage is not None: 
+                with self.prompt_tokens_mutex:
+                    self.total_prompt_tokens += response.usage.prompt_tokens
+                    self.total_completion_tokens += response.usage.completion_tokens
+                print(f"total tokens used so far: {self.total_completion_tokens + self.total_prompt_tokens}")
+                return response.choices[0].message.content
         except APIConnectionError:
             raise ChatError("Failed to talk to the chat. Connection Error.")
+        except RateLimitError:
+            raise ChatError("Rate limit exceeded")
+        except Exception as e:
+            print(e)
+            raise ChatError("another error for completion")
 
 
 class WordList:
@@ -74,23 +85,25 @@ class WordList:
 class WordProcessor:
     PROMPT_TEMPLATE_TRANSLATION = """Given a list of <original-language> words: [<word-list>], generate a JSON with the following structure:
 {
-"words":[
-    {
-        "original": <put original word from the list>
-        "meanings":[<put meanings of that word in <target-language>>]
-        "examples": [
+    "words":
+    [
         {
-        "example": <provide an exemple of usage in a sentence in <original-language> for that word>
-        "translation":<give translation for provided exemple in <target-language>>
+            "original": <put original word from the list>,
+            "meanings":[<put meanings of that word in English>],
+            "lemma": <put a root form of the original word>
+            "lemma_meanings":[<put meanings of a lemma in English>],
+            "examples": 
+            [
+                {
+                "example": <provide an exemple of usage in a <original-language> sentence for that word>
+                "translation":<give an English translation for provided exemple>
+                }
+            ]
         }
-    }
-]
+   ]
 }
 Give at least 3 examples for each word. In a response give me just JSON.
 """
-    PROMPT_TEMPLATE_CORRECTION = """Given a list of <original-language> words: [<word-list>], generate a list of those words in their
-root forms. Output just the root forms, each in one line."""
-
     def __init__(self, chat:Chat, original_language, target_language):
         self.chat = chat
         self.original_language = original_language
@@ -100,8 +113,31 @@ root forms. Output just the root forms, each in one line."""
 
     def translate_words(self, words):
         prompt = self.prompt_template.replace('<word-list>', ', '.join(words))
-        response = self.chat(prompt)
-        return self._convert_response_to_json(response)
+        try:
+            response = self.chat(prompt)
+        except ChatError as e:
+            print(e)
+            response = ""
+        response_json = self._convert_response_to_json(response)
+        words_successful, words_missing = self._summary(words, response_json)
+        print(f"batch completed: {len(words_missing)} words missing out of {len(words)}")
+        return response_json, words_successful, words_missing
 
     def _convert_response_to_json(self, response):
-        pass
+        response = response.replace("json\n", "").replace("`","")
+        try:
+            return json.loads(response)
+        except Exception as e:
+            print(e)
+            return {}
+
+    def _summary(self, words, response_dict):
+        words_idxs = {word:i for i, word in enumerate(words)}
+        try:
+            words_response = [word["original"] for word in response_dict["words"]]
+            words_missing = {word:i for word, i in words_idxs.items() if not word in words_response}
+            words_successful = {word:i for word, i in words_idxs.items() if word in words_response}
+            return words_successful, words_missing
+        except Exception as e:
+            print(e)
+            return {}, words_idxs
