@@ -60,16 +60,6 @@ func (callbackHandler CallbackHandler) GetResponder(cq telegramapi.CallbackQuery
 func (callbackHandler CallbackHandler) nextWord(chatId int64, data MenuCallbackData) Responder {
 	errorMsg := SendMsg{ChatId: chatId, Text: "Internal error. Try again later"}
 	tableName := fmt.Sprintf("words_%s_%s", data.Language, strconv.Itoa(int(data.Difficulty)))
-	// var rowCount int
-	// query := fmt.Sprintf("SELECT COUNT(lemma) FROM %s", tableName)
-	// err := callbackHandler.db.QueryRow(context.TODO(), query).Scan(&rowCount)
-	// if err != nil {
-	// 	slog.Error(fmt.Sprintf("during fetching "))
-	// 	fmt.Println(err)
-	// }
-	// if rowCount == 0 {
-	// 	return SendMsg{ChatId: chatId, Text: "no words for this language and difficulty level, yet. try again later or choose a different level"}
-	// }
 	query := fmt.Sprintf("SELECT * FROM %s ORDER BY RANDOM() LIMIT 1", tableName)
 	rows, err := callbackHandler.db.Query(context.TODO(), query)
 	if err != nil {

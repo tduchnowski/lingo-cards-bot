@@ -40,10 +40,5 @@ func main() {
 		return
 	}
 	slog.Info("Bot ready to fetch updates")
-	// bot handlers
-	// bot.commandHandler = handlers.NewCommandHandler(db) //CommandHandler{db: db}
-	// bot.callbackHandler = CallbackHandler{db: db}
-	// go bot.startFetchingUpdates(60)
-	// bot.handleUpdates()
 	bot.run(db, 60)
 }
