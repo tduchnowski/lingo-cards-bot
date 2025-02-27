@@ -126,16 +126,6 @@ FROM '/docker-entrypoint-initdb.d/frequencies/it_frequencies.csv'
 DELIMITER ','
 CSV HEADER;
 
--- delete from tmp_translations where lemma is null;
--- delete from tmp_translations where lemma_meaning like '%a name%';
--- delete from tmp_translations where lemma_meaning like '%personal name%'
--- delete from tmp_translations where lemma_meaning like '%given name%'
--- delete from tmp_translations where lemma_meaning like '%male name%'
--- delete from tmp_translations where lemma_meaning like '%nickname%'
--- delete from tmp_translations where lemma_meaning like '%name)%'
--- delete from tmp_translations where lemma_meaning like '% surname%'
--- delete from tmp_translations where lemma_meaning like '%proper noun%'
-
 -- translations + frequency
 CREATE VIEW translations AS (
   SELECT tmp_translations.id, tmp_translations.lang_code, tmp_translations.word, meaning, lemma, lemma_meaning, sentences, frequency FROM frequencies
@@ -172,126 +162,75 @@ create view lemmas_percentiles_per_lang as (
 	group by lang_code
 );
 
--- POLISH
-create materialized view words_pl_0 as (
-	select lemma, lemma_meaning, sentences
-	from lemmas_percentiles_per_lang
-	join lemmas_clean
-	on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
-	where lemmas_clean.lang_code='pl' and total_freq > percentile_75
-);
-create materialized view words_pl_1 as (
-	select lemma, lemma_meaning, sentences
-	from lemmas_percentiles_per_lang
-	join lemmas_clean
-	on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
-	where lemmas_clean.lang_code='pl' and total_freq <= percentile_75 and total_freq >= percentile_25
-);
-create materialized view words_pl_2 as (
-	select lemma, lemma_meaning, sentences
-	from lemmas_percentiles_per_lang
-	join lemmas_clean
-	on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
-	where lemmas_clean.lang_code='pl' and total_freq < percentile_25
-);
+create or replace function create_language_materialized_views()
+returns void as 
+$$
+declare
+	lang_codes text[] := array['pl', 'ru', 'es', 'pt', 'it', 'ptbr', 'zhcn', 'hu', 'ko', 'ja', 'sr', 'et', 'fa', 'fi'];
+	code text;
+	num int;
+	view_name text;
+	query text;
+begin
+	foreach code in array lang_codes loop
+		view_name := 'words_' || code || '_0';
+		query := 'create materialized view ' || view_name || ' as' ||
+				'( 	select lemma, lemma_meaning, sentences 
+				from lemmas_percentiles_per_lang 
+				join lemmas_clean
+				on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
+				where lemmas_clean.lang_code=''' || code || ''' and total_freq > percentile_75);';
+		execute query;
+		raise notice 'materialized view % created', view_name;
 
--- RUSSIAN
-create materialized view words_ru_0 as (
-	select lemma, lemma_meaning, sentences
-	from lemmas_percentiles_per_lang
-	join lemmas_clean
-	on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
-	where lemmas_clean.lang_code='ru' and total_freq > percentile_75
-);
-create materialized view words_ru_1 as (
-	select lemma, lemma_meaning, sentences
-	from lemmas_percentiles_per_lang
-	join lemmas_clean
-	on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
-	where lemmas_clean.lang_code='ru' and total_freq <= percentile_75 and total_freq >= percentile_25
-);
-create materialized view words_ru_2 as (
-	select lemma, lemma_meaning, sentences
-	from lemmas_percentiles_per_lang
-	join lemmas_clean
-	on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
-	where lemmas_clean.lang_code='ru' and total_freq < percentile_25
-);
+		view_name := 'words_' || code || '_1';
+		query := 'create materialized view ' || view_name || ' as' ||
+				'( 	select lemma, lemma_meaning, sentences 
+				from lemmas_percentiles_per_lang 
+				join lemmas_clean
+				on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
+				where lemmas_clean.lang_code=''' || code || ''' and total_freq <= percentile_75 and total_freq >= percentile_25);';
+		execute query;
+		raise notice 'materialized view % created', view_name;
 
--- SPANISH
-create materialized view words_es_0 as (
-	select lemma, lemma_meaning, sentences
-	from lemmas_percentiles_per_lang
-	join lemmas_clean
-	on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
-	where lemmas_clean.lang_code='es' and total_freq > percentile_75
-);
-create materialized view words_es_1 as (
-	select lemma, lemma_meaning, sentences
-	from lemmas_percentiles_per_lang
-	join lemmas_clean
-	on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
-	where lemmas_clean.lang_code='es' and total_freq <= percentile_75 and total_freq >= percentile_25
-);
-create materialized view words_es_2 as (
-	select lemma, lemma_meaning, sentences
-	from lemmas_percentiles_per_lang
-	join lemmas_clean
-	on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
-	where lemmas_clean.lang_code='es' and total_freq < percentile_25
-);
+		view_name := 'words_' || code || '_2';
+		query := 'create materialized view ' || view_name || ' as' ||
+				'( 	select lemma, lemma_meaning, sentences 
+				from lemmas_percentiles_per_lang 
+				join lemmas_clean
+				on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
+				where lemmas_clean.lang_code=''' || code || ''' and total_freq < percentile_25);';
+		execute query;
+		raise notice 'materialized view % created', view_name;
+	end loop;
+end;
+$$
+language 'plpgsql';
 
--- PORTUGUESE
-create materialized view words_pt_0 as (
-	select lemma, lemma_meaning, sentences
-	from lemmas_percentiles_per_lang
-	join lemmas_clean
-	on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
-	where lemmas_clean.lang_code='pt' and total_freq > percentile_75
-);
-create materialized view words_pt_1 as (
-	select lemma, lemma_meaning, sentences
-	from lemmas_percentiles_per_lang
-	join lemmas_clean
-	on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
-	where lemmas_clean.lang_code='pt' and total_freq <= percentile_75 and total_freq >= percentile_25
-);
-create materialized view words_pt_2 as (
-	select lemma, lemma_meaning, sentences
-	from lemmas_percentiles_per_lang
-	join lemmas_clean
-	on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
-	where lemmas_clean.lang_code='pt' and total_freq < percentile_25
-);
+select create_language_materialized_views();
 
--- ITALIAN
-create materialized view words_it_0 as (
-	select lemma, lemma_meaning, sentences
-	from lemmas_percentiles_per_lang
-	join lemmas_clean
-	on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
-	where lemmas_clean.lang_code='it' and total_freq > percentile_75
-);
-create materialized view words_it_1 as (
-	select lemma, lemma_meaning, sentences
-	from lemmas_percentiles_per_lang
-	join lemmas_clean
-	on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
-	where lemmas_clean.lang_code='it' and total_freq <= percentile_75 and total_freq >= percentile_25
-);
-create materialized view words_it_2 as (
-	select lemma, lemma_meaning, sentences
-	from lemmas_percentiles_per_lang
-	join lemmas_clean
-	on lemmas_clean.lang_code=lemmas_percentiles_per_lang.lang_code
-	where lemmas_clean.lang_code='it' and total_freq < percentile_25
-);
-
-create materialized view language_codes as
-(
-	select distinct lang_code from lemmas_clean
-	order by lang_code
-);
+--  for periodically refreshing all the views needed by the bot
+create or replace function create_language_materialized_views()
+returns void as 
+$$
+declare
+	lang_codes text[] := array['pl', 'ru', 'es', 'pt', 'it', 'ptbr', 'zhcn', 'hu', 'ko', 'ja', 'sr', 'et', 'fa', 'fi'];
+	code text;
+	num int;
+	view_name text;
+	query text;
+begin
+	foreach code in array lang_codes loop
+		for num in 0..2 loop
+			view_name := 'words_' || code || '_' || num;
+			query := 'refresh materialized view '|| view_name;
+			execute query;
+			raise notice 'refreshed materialized view %', view_name;
+		end loop;
+	end loop;
+end;
+$$
+language 'plpgsql';
 
 -- TELEGRAM USERS TABLE SETUP
 CREATE TABLE private_chats (
