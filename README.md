@@ -8,6 +8,8 @@ The frequency lists I used where based on the words taken from OpenSubtitles.org
 
 So far the database contains 5 languages: Polish, Russian, Spanish, Poruguese and Italian. Each of them have around 10-13k lemmas in it. These lemmas are categorized into 3 groups: most frequent words (75th percentile and higher), pretty common (the middle ground - from 25th to 75th percentile), and less frequent words (below 25th percentile).
 
+![]("https://github.com/tduchnowski/lingo-cards-bot/blob/main/lingocards.gif")
+
 TODOs:
   - testing
   - rewriting the scripts for generating translations and lemmas in Go
