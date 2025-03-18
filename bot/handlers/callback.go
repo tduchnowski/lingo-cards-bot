@@ -52,6 +52,7 @@ func (callbackHandler CallbackHandler) GetResponder(cq telegramapi.CallbackQuery
 		case 2:
 			responders = append(responders, callbackHandler.nextWord(cq.Msg.Chat.Id, callbackData))
 		}
+		go callbackHandler.updateUserActivity(&cq, callbackData)
 		return append(responders, AnswerCallback{CallbackQueryId: cq.Id})
 	}
 	return append(responders, SendMsg{}, AnswerCallback{CallbackQueryId: cq.Id})
@@ -95,18 +96,18 @@ func formatWordMsg(word database.WordEntry) string {
 	return formattedWord
 }
 
+// the examples in the database are of this form:
+// <example><sentence>...</sentence><translation>...</translation></example><example><sentence>...</sentence><translation></translation>...</example>
+// this function transforms it into a string like that:
+//
+// Examples of sentences
+// sentence 1
+// translation 1
+//
+// sentence 2
+// translation 2
+// ...
 func formatExamples(examplesRaw string) string {
-	// the examples in the database are of this form:
-	// <example><sentence>...</sentence><translation>...</translation></example><example><sentence>...</sentence><translation></translation>...</example>
-	// this function transforms it into a string like that:
-	//
-	// Examples of sentences
-	// sentence 1
-	// translation 1
-	//
-	// sentence 2
-	// translation 2
-	// ...
 
 	xmlString := fmt.Sprintf("<examples>%s</examples>", examplesRaw) // have to wrap it in a root element for Unmarshaling
 	var examples database.Examples
@@ -135,4 +136,9 @@ func nextWordKeyboardMarkup(data MenuCallbackData) *telegramapi.InlineKeyboardMa
 	}
 	keyboard[0] = []telegramapi.InlineKeyboardButton{{Text: "Next", CallbackData: string(dataJson)}}
 	return &telegramapi.InlineKeyboardMarkup{InlineKeyboard: keyboard}
+}
+
+func (callbackHandler CallbackHandler) updateUserActivity(cq *telegramapi.CallbackQuery, cd MenuCallbackData) {
+	slog.Info(fmt.Sprintf("user activity -- callback data: %+v, user: %s", cd, cq.Msg.Chat.Username))
+	createOrUpdatePrivateChat(callbackHandler.db, cq.Msg.Chat.Username, cq.Msg.Chat.Id)
 }
