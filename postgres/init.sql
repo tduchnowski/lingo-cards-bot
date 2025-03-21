@@ -162,6 +162,10 @@ create view lemmas_percentiles_per_lang as (
 	group by lang_code
 );
 
+create materialized view language_codes as (
+	select distinct lang_code from lemmas_percentiles_per_lang
+);
+
 create or replace function create_language_materialized_views()
 returns void as 
 $$
@@ -210,7 +214,7 @@ language 'plpgsql';
 select create_language_materialized_views();
 
 --  for periodically refreshing all the views needed by the bot
-create or replace function create_language_materialized_views()
+create or replace function refresh_language_materialized_views()
 returns void as 
 $$
 declare
