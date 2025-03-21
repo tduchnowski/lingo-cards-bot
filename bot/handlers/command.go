@@ -60,11 +60,11 @@ func menu(msg telegramapi.Message, db *pgxpool.Pool) Responder {
 }
 
 func about(msg telegramapi.Message) Responder {
-	text := "The frequency lists I used where based on the words taken from OpenSubtitles.org. Since those lists take words as they appear in text, they contain many words not in their root form (conjugated verbs etc.) or words that don't add much value for learning (peoples' names for example). I created a lemma database and examples with Chat GPT (gpt-4o-mini model). For every lemma, its count is a sum of counts of the words that have that lemma as its root.\n\nIf you have any suggestions, feel free to message @CosmicBuddy."
+	text := "The frequency lists I used were based on the words taken from OpenSubtitles.org. Since those lists take words as they appear in text, they contain many words not in their root form (conjugated verbs etc.) or words that don't add much value for learning (peoples' names for example). I created a lemma database and examples with Chat GPT (gpt-4o-mini model). For every lemma, its count is a sum of counts of the words that have that lemma as its root.\n\nIf you have any suggestions, feel free to message @CosmicBuddy."
 	return SendMsg{ChatId: msg.Chat.Id, Text: text}
 }
 
 func help(msg telegramapi.Message) Responder {
-	text := "Commands:\n\n/menu - choose a language and frequency and start exploring the words\n\n/about - information about this bot"
+	text := "Commands:\n\n/menu - choose a language and frequency and start exploring words\n\n/about - information about this bot"
 	return SendMsg{ChatId: msg.Chat.Id, Text: text}
 }
