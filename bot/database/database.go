@@ -33,8 +33,3 @@ func CreateConnection(url string) (*pgxpool.Pool, error) {
 	dbCfg.HealthCheckPeriod = time.Minute * 5
 	return pgxpool.NewWithConfig(context.Background(), dbCfg)
 }
-
-// TODO:
-func Ping(db *pgxpool.Pool) error {
-	return nil
-}

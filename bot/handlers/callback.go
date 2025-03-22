@@ -67,6 +67,7 @@ func (callbackHandler CallbackHandler) nextWord(chatId int64, data MenuCallbackD
 		slog.Error(fmt.Sprintf("couldn't retrieve rows from %s - menuCallbackData=%+v, error: %s", tableName, data, err.Error()))
 		return errorMsg
 	}
+	defer rows.Close()
 	words, err := pgx.CollectRows(rows, pgx.RowToStructByName[database.WordEntry])
 	if err != nil {
 		slog.Error(fmt.Sprintf("couldn't parse results from database into WordEntry struct - tableName=%s, menuCallbackData=%+v, error: %s", tableName, data, err.Error()))
