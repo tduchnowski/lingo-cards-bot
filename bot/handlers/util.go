@@ -53,6 +53,7 @@ func getSupportedLanguages(dbPool *pgxpool.Pool) ([]Language, error) {
 		slog.Error(fmt.Sprintf("couldn't retrieve supported languages from the database: %s", err.Error()))
 		return []Language{}, err
 	}
+	defer rows.Close()
 	// this is clumsy
 	type stringList struct {
 		Lang_code string `db:"lang_code"`
@@ -71,10 +72,11 @@ func getSupportedLanguages(dbPool *pgxpool.Pool) ([]Language, error) {
 
 func createOrUpdatePrivateChat(dbPool *pgxpool.Pool, username string, chatId int64) error {
 	query := fmt.Sprintf("INSERT INTO %s VALUES ('%s', %d) ON CONFLICT (username) DO UPDATE SET chat_id=%d", privateChatsTableName, username, chatId, chatId)
-	_, err := dbPool.Query(context.TODO(), query)
+	q, err := dbPool.Query(context.TODO(), query)
 	if err != nil {
 		slog.Error(fmt.Sprintf("couldn't add username=%s chatId=%d to the database: %s", username, chatId, err.Error()))
 	}
+	defer q.Close()
 	slog.Info(fmt.Sprintf("updated database with user: username=%s, chatId=%d", username, chatId))
 	return nil
 }

@@ -10,96 +10,81 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"sync"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Bot struct {
 	telegramapi.User
-	token              string
-	baseUrl            string
-	updateResponseChan chan []byte
-	lastUpdateIdChan   chan int64
+	token           string
+	baseUrl         string
+	cmdHandler      handlers.CommandHandler
+	callbackHandler handlers.CallbackHandler
 }
 
-func (b Bot) run(db *pgxpool.Pool, timeout int) {
-	var wg sync.WaitGroup
-	wg.Add(2)
-	b.startFetchingUpdates(timeout, &wg)
-	b.handleUpdateResponses(db, &wg)
-	wg.Wait()
+func (b *Bot) addCmdHandler(cmdHandler handlers.CommandHandler) {
+	b.cmdHandler = cmdHandler
 }
 
-func (b *Bot) startFetchingUpdates(timeout int, wg *sync.WaitGroup) {
-	b.updateResponseChan = make(chan []byte)
-	b.lastUpdateIdChan = make(chan int64)
-	lastUpdateId := int64(0)
-	go func(lastId int64) {
-		defer wg.Done()
-		for {
-			client := http.Client{Timeout: time.Duration(timeout) * time.Second}
-			urlQuery := fmt.Sprintf("%s/getUpdates?timeout=%d&offset=%d", b.baseUrl, timeout, lastId+1)
-			slog.Info("Fetching updates from Telegram")
-			res, clientErr := client.Get(urlQuery)
-			if clientErr != nil {
-				slog.Error("Error during update fetching" + clientErr.Error())
-				time.Sleep(5 * time.Second)
-				continue
-			}
-			if res.StatusCode != 200 {
-				slog.Error(fmt.Sprintf("Telegram responded with status: %s", res.Status))
-				time.Sleep(5 * time.Second)
-				continue
-			}
-			body, readErr := io.ReadAll(res.Body)
-			if readErr != nil {
-				slog.Error(readErr.Error())
-				time.Sleep(5 * time.Second)
-				continue
-			}
-			b.updateResponseChan <- body
-			lastId = <-b.lastUpdateIdChan
-			res.Body.Close()
+func (b *Bot) addCallbackHandler(callbackHandler handlers.CallbackHandler) {
+	b.callbackHandler = callbackHandler
+}
+
+func (b Bot) start(timeout int) {
+	lastId := int64(0)
+	for {
+		client := http.Client{Timeout: time.Duration(timeout) * time.Second}
+		urlQuery := fmt.Sprintf("%s/getUpdates?timeout=%d&offset=%d", b.baseUrl, timeout, lastId+1)
+		slog.Info("fetching updates from Telegram")
+		res, clientErr := client.Get(urlQuery)
+		if clientErr != nil {
+			slog.Error("error during update fetching" + clientErr.Error())
+			time.Sleep(5 * time.Second)
+			continue
 		}
-	}(lastUpdateId)
-}
-
-func (b *Bot) handleUpdateResponses(db *pgxpool.Pool, wg *sync.WaitGroup) {
-	cmdHandler := handlers.NewCommandHandler(db)
-	callbackHandler := handlers.NewCallbackHandler(db)
-	go func() {
-		defer wg.Done()
-		var lastProcessedUpdateId int64 = int64(0)
-		for updateBody := range b.updateResponseChan {
-			var ur telegramapi.UpdateResponse
-			err := json.Unmarshal(updateBody, &ur)
-			if err != nil {
-				slog.Error(err.Error())
-				continue
-			}
-			slog.Info(fmt.Sprintf("Received %d updates", len(ur.Updates)))
-			for _, update := range ur.Updates {
-				lastProcessedUpdateId = update.Id
-				go func() {
-					var reply handlers.Responder
-					switch update.GetUpdateType() {
-					case "message":
-						reply = cmdHandler.GetResponder(update.Msg)
-					case "callback":
-						reply = callbackHandler.GetResponder(update.CallbackQuery)
-					default:
-						reply = handlers.SendMsg{}
-					}
-					reply.Respond(b.baseUrl)
-				}()
-			}
-			b.lastUpdateIdChan <- lastProcessedUpdateId
+		if res.StatusCode != 200 {
+			slog.Error(fmt.Sprintf("telegram responded with status: %s", res.Status))
+			time.Sleep(5 * time.Second)
+			continue
 		}
-	}()
+		body, readErr := io.ReadAll(res.Body)
+		if readErr != nil {
+			slog.Error(readErr.Error())
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		lastId = b.handleUpdateResponse(body)
+		res.Body.Close()
+	}
 }
 
+func (b Bot) handleUpdateResponse(updateBody []byte) int64 {
+	var ur telegramapi.UpdateResponse
+	err := json.Unmarshal(updateBody, &ur)
+	if err != nil {
+		slog.Error("handleUpdateResponse - " + err.Error())
+		return 0
+	}
+	slog.Info(fmt.Sprintf("received %d updates", len(ur.Updates)))
+	var lastUpdateId int64
+	for _, update := range ur.Updates {
+		go func() {
+			var reply handlers.Responder
+			switch update.GetUpdateType() {
+			case "message":
+				reply = b.cmdHandler.GetResponder(update.Msg)
+			case "callback":
+				reply = b.callbackHandler.GetResponder(update.CallbackQuery)
+			default:
+				reply = handlers.SendMsg{}
+			}
+			reply.Respond(b.baseUrl)
+		}()
+		lastUpdateId = update.Id
+	}
+	return lastUpdateId
+}
+
+// verifies token and then creates Bot struct and returns it
 func createBot(token string) (Bot, error) {
 	baseUrl := os.Getenv("TG_BOT_URL") + token
 	getMeUrl := baseUrl + "/getMe"

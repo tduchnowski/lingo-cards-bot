@@ -162,6 +162,10 @@ create view lemmas_percentiles_per_lang as (
 	group by lang_code
 );
 
+create materialized view language_codes as (
+	select distinct lang_code from lemmas_percentiles_per_lang
+);
+
 create or replace function create_language_materialized_views()
 returns void as 
 $$
@@ -210,7 +214,7 @@ language 'plpgsql';
 select create_language_materialized_views();
 
 --  for periodically refreshing all the views needed by the bot
-create or replace function create_language_materialized_views()
+create or replace function refresh_language_materialized_views()
 returns void as 
 $$
 declare
@@ -234,6 +238,20 @@ language 'plpgsql';
 
 -- TELEGRAM USERS TABLE SETUP
 CREATE TABLE private_chats (
-  username VARCHAR(100) PRIMARY KEY, -- telegram username if its a private chat
-  chat_id BIGINT -- telegram chat id
+  username VARCHAR(100) PRIMARY KEY, 
+  chat_id BIGINT, -- telegram chat id
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
+
+CREATE OR REPLACE FUNCTION update_modified_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_private_chats_modtime
+    BEFORE UPDATE ON private_chats 
+    FOR EACH ROW EXECUTE FUNCTION update_modified_column();

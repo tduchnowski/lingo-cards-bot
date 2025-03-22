@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"lang-learn-bot/database"
+	"lang-learn-bot/handlers"
 	"log/slog"
 	"os"
 )
@@ -10,7 +11,7 @@ import (
 func main() {
 	token := os.Getenv("BOT_TOKEN")
 	if token == "" {
-		slog.Error("No token provided. Exiting.")
+		slog.Error("no token provided. exiting.")
 		return
 	}
 	// db init
@@ -20,25 +21,24 @@ func main() {
 	dbPassword := os.Getenv("BOT_DB_PASSWORD")
 	dbName := os.Getenv("BOT_DB_NAME")
 	dbUrl := fmt.Sprintf("postgres://%s:%s@%s:%s/%s", dbUser, dbPassword, dbHost, dbPort, dbName)
-	slog.Info(fmt.Sprintf("Initializing the connection to the database: host=%s, port=%s, user=%s, database=%s", dbHost, dbPort, dbUser, dbName))
+	slog.Info(fmt.Sprintf("initializing the connection to the database: host=%s, port=%s, user=%s, database=%s", dbHost, dbPort, dbUser, dbName))
 	//TODO: ping the db to be sure
 	db, err := database.CreateConnection(dbUrl)
 	if err != nil {
-		slog.Error("Database connection failed")
+		slog.Error("database connection failed")
 		slog.Error(err.Error())
-		slog.Error("Exiting")
+		slog.Error("exiting")
 		return
 	}
 	defer db.Close()
 	bot, err := createBot(token)
 	if err != nil {
-		// TODO: actually wrong token is not the only reason why this may
-		// return an error. could be simply that Telegram is down.
-		// so make it retry in case of a timout
-		slog.Error("Wrong token. Exiting")
 		slog.Error(err.Error())
+		slog.Error("exiting")
 		return
 	}
-	slog.Info("Bot ready to fetch updates")
-	bot.run(db, 60)
+	bot.addCmdHandler(handlers.NewCommandHandler(db))
+	bot.addCallbackHandler(handlers.NewCallbackHandler(db))
+	slog.Info("bot ready to fetch updates")
+	bot.start(60)
 }
