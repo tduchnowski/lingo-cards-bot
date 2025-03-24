@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"lang-learn-bot/handlers"
+	"lang-learn-bot/handler"
 	"lang-learn-bot/telegramapi"
 	"log/slog"
 	"net/http"
@@ -17,15 +17,15 @@ type Bot struct {
 	telegramapi.User
 	token           string
 	baseUrl         string
-	cmdHandler      handlers.CommandHandler
-	callbackHandler handlers.CallbackHandler
+	cmdHandler      handler.CommandHandler
+	callbackHandler handler.CallbackHandler
 }
 
-func (b *Bot) addCmdHandler(cmdHandler handlers.CommandHandler) {
+func (b *Bot) addCmdHandler(cmdHandler handler.CommandHandler) {
 	b.cmdHandler = cmdHandler
 }
 
-func (b *Bot) addCallbackHandler(callbackHandler handlers.CallbackHandler) {
+func (b *Bot) addCallbackHandler(callbackHandler handler.CallbackHandler) {
 	b.callbackHandler = callbackHandler
 }
 
@@ -68,14 +68,14 @@ func (b Bot) handleUpdateResponse(updateBody []byte) int64 {
 	var lastUpdateId int64
 	for _, update := range ur.Updates {
 		go func() {
-			var reply handlers.Responder
+			var reply handler.Responder
 			switch update.GetUpdateType() {
 			case "message":
 				reply = b.cmdHandler.GetResponder(update.Msg)
 			case "callback":
 				reply = b.callbackHandler.GetResponder(update.CallbackQuery)
 			default:
-				reply = handlers.SendMsg{}
+				reply = handler.SendMsg{}
 			}
 			reply.Respond(b.baseUrl)
 		}()

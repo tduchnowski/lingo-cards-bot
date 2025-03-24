@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"lang-learn-bot/database"
-	"lang-learn-bot/handlers"
+	"lang-learn-bot/handler"
 	"log/slog"
 	"os"
 )
@@ -37,8 +37,8 @@ func main() {
 		slog.Error("exiting")
 		return
 	}
-	bot.addCmdHandler(handlers.NewCommandHandler(db))
-	bot.addCallbackHandler(handlers.NewCallbackHandler(db))
+	bot.addCmdHandler(handler.NewCommandHandler(db))
+	bot.addCallbackHandler(handler.NewCallbackHandler(db))
 	slog.Info("bot ready to fetch updates")
 	bot.start(60)
 }

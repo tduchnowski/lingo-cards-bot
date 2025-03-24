@@ -1,4 +1,4 @@
-package handlers
+package handler
 
 import (
 	"context"
@@ -87,12 +87,13 @@ func formatWordMsg(word database.WordEntry) string {
 	header := fmt.Sprintf("*%s*", word.Lemma)
 	meaning := fmt.Sprintf("*meaning:* %s", word.LemmaMeaning)
 	var sentences string
-	if word.Sentences == nil {
-		sentences = ""
+	var formattedWord string
+	if word.Sentences == nil || *(word.Sentences) == "" {
+		formattedWord = fmt.Sprintf("\n%s\n\n||%s||\n\n", header, meaning)
 	} else {
 		sentences = fmt.Sprintf("*examples of sentences:*\n\n%s", formatExamples(*word.Sentences))
+		formattedWord = fmt.Sprintf("\n%s\n\n||%s\n\n%s||\n\n", header, meaning, sentences)
 	}
-	formattedWord := fmt.Sprintf("\n%s\n\n||%s\n\n%s||\n\n", header, meaning, sentences)
 	formattedWord = excapeChars(formattedWord)
 	return formattedWord
 }
@@ -109,13 +110,15 @@ func formatWordMsg(word database.WordEntry) string {
 // translation 2
 // ...
 func formatExamples(examplesRaw string) string {
-
+	if examplesRaw == "" {
+		return ""
+	}
 	xmlString := fmt.Sprintf("<examples>%s</examples>", examplesRaw) // have to wrap it in a root element for Unmarshaling
 	var examples database.Examples
 	err := xml.Unmarshal([]byte(xmlString), &examples)
 	if err != nil {
 		slog.Error(fmt.Sprintf("couldn't unmarshal example sentences. xmlString=%s, error: %s", xmlString, err.Error()))
-		return "_no examples for this word yet_"
+		return ""
 	}
 	maxShownExamples := 3
 	shuffleSlice(examples.Sentences, maxShownExamples)
@@ -141,5 +144,12 @@ func nextWordKeyboardMarkup(data MenuCallbackData) *telegramapi.InlineKeyboardMa
 
 func (callbackHandler CallbackHandler) updateUserActivity(cq *telegramapi.CallbackQuery, cd MenuCallbackData) {
 	slog.Info(fmt.Sprintf("user activity -- callback data: %+v, user: %s", cd, cq.Msg.Chat.Username))
-	createOrUpdatePrivateChat(callbackHandler.db, cq.Msg.Chat.Username, cq.Msg.Chat.Id)
+	username := cq.Msg.Chat.Username
+	chatId := cq.Msg.Chat.Id
+	err := createOrUpdatePrivateChat(callbackHandler.db, username, chatId)
+	if err != nil {
+		slog.Error(fmt.Sprintf("couldn't add username=%s chatId=%d to the database: %s", username, chatId, err.Error()))
+		return
+	}
+	slog.Info(fmt.Sprintf("updated database with user: username=%s, chatId=%d", username, chatId))
 }

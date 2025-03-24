@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"lang-learn-bot/database"
-	"lang-learn-bot/handlers"
+	"lang-learn-bot/handler"
 	"lang-learn-bot/telegramapi"
 	"log/slog"
 	"math/rand"
@@ -17,8 +17,8 @@ import (
 	"testing"
 )
 
-var cmdHandler handlers.CommandHandler
-var clbckHandler handlers.CallbackHandler
+var cmdHandler handler.CommandHandler
+var clbckHandler handler.CallbackHandler
 
 var updates []telegramapi.Update
 
@@ -34,11 +34,33 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		return
 	}
-	cmdHandler = handlers.NewCommandHandler(db)
-	clbckHandler = handlers.NewCallbackHandler(db)
+	cmdHandler = handler.NewCommandHandler(db)
+	clbckHandler = handler.NewCallbackHandler(db)
 	updates = generateUpdates(100)
 	exitVal := m.Run()
 	os.Exit(exitVal)
+}
+
+var reply handler.Responder
+
+func BenchmarkHandlers(b *testing.B) {
+	wg := sync.WaitGroup{}
+	for i := 0; i < b.N; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			update := updates[i%len(updates)]
+			switch update.GetUpdateType() {
+			case "message":
+				reply = cmdHandler.GetResponder(update.Msg)
+			case "callback":
+				reply = clbckHandler.GetResponder(update.CallbackQuery)
+			default:
+				reply = handler.SendMsg{}
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func generateUpdates(size int) []telegramapi.Update {
@@ -74,7 +96,7 @@ func randomMessageUpdate() telegramapi.Update {
 
 func randomCallbackQueryUpdate() telegramapi.Update {
 	languages := []string{"pl", "ru", "es", "pt", "it"}
-	data := handlers.MenuCallbackData{
+	data := handler.MenuCallbackData{
 		Stage:      uint8(rand.Intn(4)),
 		Difficulty: uint8(rand.Intn(3)),
 		Language:   languages[rand.Intn(len(languages))],
@@ -98,26 +120,4 @@ func randomCallbackQueryUpdate() telegramapi.Update {
 		Msg:           telegramapi.Message{},
 		CallbackQuery: clbck,
 	}
-}
-
-var reply handlers.Responder
-
-func BenchmarkHandlers(b *testing.B) {
-	wg := sync.WaitGroup{}
-	for i := 0; i < b.N; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			update := updates[i%len(updates)]
-			switch update.GetUpdateType() {
-			case "message":
-				reply = cmdHandler.GetResponder(update.Msg)
-			case "callback":
-				reply = clbckHandler.GetResponder(update.CallbackQuery)
-			default:
-				reply = handlers.SendMsg{}
-			}
-		}()
-	}
-	wg.Wait()
 }

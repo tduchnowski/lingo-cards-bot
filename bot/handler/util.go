@@ -1,4 +1,4 @@
-package handlers
+package handler
 
 import (
 	"context"
@@ -74,31 +74,30 @@ func createOrUpdatePrivateChat(dbPool *pgxpool.Pool, username string, chatId int
 	query := fmt.Sprintf("INSERT INTO %s VALUES ('%s', %d) ON CONFLICT (username) DO UPDATE SET chat_id=%d", privateChatsTableName, username, chatId, chatId)
 	q, err := dbPool.Query(context.TODO(), query)
 	if err != nil {
-		slog.Error(fmt.Sprintf("couldn't add username=%s chatId=%d to the database: %s", username, chatId, err.Error()))
+		return err
 	}
 	defer q.Close()
-	slog.Info(fmt.Sprintf("updated database with user: username=%s, chatId=%d", username, chatId))
 	return nil
 }
 
+// shuffles first n elements in a slice in-place
+// if n < 0 shuffles all slice
 func shuffleSlice[T any](sl []T, n int) {
-	// shuffles first n elements in a slice in-place
-	// if n < 0 shuffles all slice
 	slLen := len(sl)
 	if n < 0 || n > slLen {
 		n = slLen
 	}
 	for i := 0; i < n-1; i++ {
-		// for each i it picks a random element in sl[i+1:]
-		// and swaps them
+		// for each i, pick a random element in sl[i+1:]
+		// and swap them
 		randomIndex := i + 1 + rand.Intn(slLen-i-1)
 		sl[i], sl[randomIndex] = sl[randomIndex], sl[i]
 	}
 }
 
+// Telegram won't send messages containing some special
+// characters and demands them to be escaped
 func excapeChars(s string) string {
-	// Telegram won't send messages containing some special
-	// characters and demands them to be escaped
 	specialChars := "[]()~`>#+-={}.!"
 	for _, char := range specialChars {
 		s = strings.Replace(s, string(char), fmt.Sprintf("\\%c", char), -1)
