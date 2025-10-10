@@ -31,8 +31,8 @@ func (b *Bot) addCallbackHandler(callbackHandler handler.CallbackHandler) {
 
 func (b Bot) start(timeout int) {
 	lastId := int64(0)
+	client := http.Client{Timeout: time.Duration(timeout) * time.Second}
 	for {
-		client := http.Client{Timeout: time.Duration(timeout) * time.Second}
 		urlQuery := fmt.Sprintf("%s/getUpdates?timeout=%d&offset=%d", b.baseUrl, timeout, lastId+1)
 		slog.Info("fetching updates from Telegram")
 		res, clientErr := client.Get(urlQuery)

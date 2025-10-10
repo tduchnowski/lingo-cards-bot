@@ -27,14 +27,14 @@ func main() {
 	if err != nil {
 		slog.Error("database connection failed")
 		slog.Error(err.Error())
-		slog.Error("exiting")
+		slog.Info("exiting")
 		return
 	}
 	defer db.Close()
 	bot, err := createBot(token)
 	if err != nil {
 		slog.Error(err.Error())
-		slog.Error("exiting")
+		slog.Info("exiting")
 		return
 	}
 	bot.addCmdHandler(handler.NewCommandHandler(db))
