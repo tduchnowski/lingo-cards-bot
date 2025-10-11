@@ -124,7 +124,7 @@ func formatExamples(examplesRaw string) string {
 	shuffleSlice(examples.Sentences, maxShownExamples)
 	examplesSize := min(len(examples.Sentences), maxShownExamples)
 	examplesFormatted := make([]string, examplesSize)
-	for i := 0; i < examplesSize; i++ {
+	for i := range examplesSize {
 		examplesFormatted[i] = fmt.Sprintf("%s\n_%s_", examples.Sentences[i].Sentence, examples.Sentences[i].Translation)
 	}
 	return strings.Join(examplesFormatted, "\n\n")
@@ -151,5 +151,5 @@ func (callbackHandler CallbackHandler) updateUserActivity(cq *telegramapi.Callba
 		slog.Error(fmt.Sprintf("couldn't add username=%s chatId=%d to the database: %s", username, chatId, err.Error()))
 		return
 	}
-	slog.Info(fmt.Sprintf("updated database with user: username=%s, chatId=%d", username, chatId))
+	slog.Debug(fmt.Sprintf("updated database with user: username=%s, chatId=%d", username, chatId))
 }

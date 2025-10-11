@@ -9,7 +9,6 @@ import (
 	"lang-learn-bot/telegramapi"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 )
 
@@ -21,20 +20,21 @@ type Bot struct {
 	callbackHandler handler.CallbackHandler
 }
 
-func (b *Bot) addCmdHandler(cmdHandler handler.CommandHandler) {
+func (b *Bot) AddCmdHandler(cmdHandler handler.CommandHandler) {
 	b.cmdHandler = cmdHandler
 }
 
-func (b *Bot) addCallbackHandler(callbackHandler handler.CallbackHandler) {
+func (b *Bot) AddCallbackHandler(callbackHandler handler.CallbackHandler) {
 	b.callbackHandler = callbackHandler
 }
 
-func (b Bot) start(timeout int) {
+func (b Bot) Start(timeout int) {
+	slog.Info("Starting the bot")
 	lastId := int64(0)
 	client := http.Client{Timeout: time.Duration(timeout) * time.Second}
 	for {
 		urlQuery := fmt.Sprintf("%s/getUpdates?timeout=%d&offset=%d", b.baseUrl, timeout, lastId+1)
-		slog.Info("fetching updates from Telegram")
+		slog.Debug("fetching updates from Telegram")
 		res, clientErr := client.Get(urlQuery)
 		if clientErr != nil {
 			slog.Error("error during update fetching" + clientErr.Error())
@@ -64,7 +64,7 @@ func (b Bot) handleUpdateResponse(updateBody []byte) int64 {
 		slog.Error("handleUpdateResponse - " + err.Error())
 		return 0
 	}
-	slog.Info(fmt.Sprintf("received %d updates", len(ur.Updates)))
+	slog.Debug(fmt.Sprintf("received %d updates", len(ur.Updates)))
 	var lastUpdateId int64
 	for _, update := range ur.Updates {
 		go func() {
@@ -85,8 +85,8 @@ func (b Bot) handleUpdateResponse(updateBody []byte) int64 {
 }
 
 // verifies token and then creates Bot struct and returns it
-func createBot(token string) (Bot, error) {
-	baseUrl := os.Getenv("TG_BOT_URL") + token
+func CreateBot(telegramConfig TelegramConfig) (Bot, error) {
+	baseUrl := telegramConfig.BotApiUrl + telegramConfig.BotToken
 	getMeUrl := baseUrl + "/getMe"
 	res, err := http.Get(getMeUrl)
 	if err != nil {
@@ -104,7 +104,7 @@ func createBot(token string) (Bot, error) {
 	}
 	bot := Bot{
 		User:    ur.User,
-		token:   token,
+		token:   telegramConfig.BotToken,
 		baseUrl: baseUrl,
 	}
 	return bot, nil
