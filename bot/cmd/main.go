@@ -29,7 +29,7 @@ func main() {
 		return
 	}
 	defer db.Close()
-	bot, err := CreateBot(cfg.Telegram)
+	bot, err := CreateBot(cfg.Telegram, cfg.MaxWorkers)
 	if err != nil {
 		slog.Error(err.Error())
 		slog.Info("exiting")

@@ -19,6 +19,7 @@ type Bot struct {
 	baseUrl         string
 	cmdHandler      handler.CommandHandler
 	callbackHandler handler.CallbackHandler
+	sem             chan struct{}
 }
 
 func (b *Bot) AddCmdHandler(cmdHandler handler.CommandHandler) {
@@ -78,6 +79,7 @@ func (b Bot) handleUpdateResponse(updateBody []byte) int64 {
 	slog.Debug(fmt.Sprintf("received %d updates", len(ur.Updates)))
 	var lastUpdateId int64
 	for _, update := range ur.Updates {
+		b.sem <- struct{}{}
 		go func() {
 			var reply handler.Responder
 			switch update.GetUpdateType() {
@@ -89,6 +91,7 @@ func (b Bot) handleUpdateResponse(updateBody []byte) int64 {
 				reply = handler.SendMsg{}
 			}
 			reply.Respond(b.baseUrl)
+			<-b.sem
 		}()
 		lastUpdateId = update.Id
 	}
@@ -96,7 +99,7 @@ func (b Bot) handleUpdateResponse(updateBody []byte) int64 {
 }
 
 // verifies token and then creates Bot struct and returns it
-func CreateBot(telegramConfig TelegramConfig) (Bot, error) {
+func CreateBot(telegramConfig TelegramConfig, maxWorkers int) (Bot, error) {
 	baseUrl := telegramConfig.BotApiUrl + telegramConfig.BotToken
 	getMeUrl := baseUrl + "/getMe"
 	res, err := http.Get(getMeUrl)
@@ -113,10 +116,12 @@ func CreateBot(telegramConfig TelegramConfig) (Bot, error) {
 	if err != nil {
 		return Bot{}, err
 	}
+	workerSem := make(chan struct{}, maxWorkers)
 	bot := Bot{
 		User:    ur.User,
 		token:   telegramConfig.BotToken,
 		baseUrl: baseUrl,
+		sem:     workerSem,
 	}
 	return bot, nil
 }

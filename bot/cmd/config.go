@@ -21,8 +21,9 @@ type DbConfig struct {
 }
 
 type Config struct {
-	Telegram TelegramConfig `mapstructure:"TELEGRAM"`
-	Db       DbConfig       `mapstructure:"DB"`
+	MaxWorkers int            `mapstructure:"MAX_WORKERS"`
+	Telegram   TelegramConfig `mapstructure:"TELEGRAM"`
+	Db         DbConfig       `mapstructure:"DB"`
 }
 
 func LoadConfig(path string) (Config, error) {
