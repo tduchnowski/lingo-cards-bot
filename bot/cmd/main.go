@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"lang-learn-bot/database"
 	"lang-learn-bot/handler"
 	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
@@ -33,5 +37,11 @@ func main() {
 	}
 	bot.AddCmdHandler(handler.NewCommandHandler(db))
 	bot.AddCallbackHandler(handler.NewCallbackHandler(db))
-	bot.Start(60)
+	ctx, cancel := context.WithCancel(context.Background())
+	go bot.Start(ctx, 60)
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	<-sigs
+	cancel()
+	slog.Info("stopping application")
 }

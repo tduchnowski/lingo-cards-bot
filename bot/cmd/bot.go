@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,16 +29,26 @@ func (b *Bot) AddCallbackHandler(callbackHandler handler.CallbackHandler) {
 	b.callbackHandler = callbackHandler
 }
 
-func (b Bot) Start(timeout int) {
-	slog.Info("Starting the bot")
+func (b Bot) Start(ctx context.Context, timeout int) {
+	slog.Info("Starting bot")
 	lastId := int64(0)
 	client := http.Client{Timeout: time.Duration(timeout) * time.Second}
 	for {
 		urlQuery := fmt.Sprintf("%s/getUpdates?timeout=%d&offset=%d", b.baseUrl, timeout, lastId+1)
+		req, err := http.NewRequestWithContext(ctx, "GET", urlQuery, nil)
+		if err != nil {
+			slog.Error("error creating a request: " + err.Error())
+			time.Sleep(5 * time.Second)
+			continue
+		}
 		slog.Debug("fetching updates from Telegram")
-		res, clientErr := client.Get(urlQuery)
+		res, clientErr := client.Do(req)
 		if clientErr != nil {
-			slog.Error("error during update fetching" + clientErr.Error())
+			if errors.Is(clientErr, context.Canceled) {
+				slog.Info("bot stopped")
+				return
+			}
+			slog.Error("error during update fetching " + clientErr.Error())
 			time.Sleep(5 * time.Second)
 			continue
 		}
