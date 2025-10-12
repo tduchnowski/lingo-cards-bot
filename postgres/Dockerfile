@@ -1,4 +1,4 @@
-FROM postgres:latest
+FROM postgres:alpine
 
 # copy dictionaries, frequencies and wiktionary dumps to container
 COPY dictionaries/ /docker-entrypoint-initdb.d/dictionaries

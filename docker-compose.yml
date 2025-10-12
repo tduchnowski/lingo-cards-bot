@@ -1,28 +1,31 @@
 services:
   bot:
+    image: registry.gitlab.com/tduchnowski/lingo-cards-bot/bot:1.0.0
     build:
       context: ./bot
       dockerfile: Dockerfile
     environment:
-      BOT_TOKEN: token
-      TG_BOT_URL: https://api.telegram.org/bot
-      BOT_DB_HOST: db
-      BOT_DB_PORT: 5432
-      BOT_DB_USER: postgres
-      BOT_DB_PASSWORD: postgres
-      BOT_DB_NAME: bot
+      MAX_WORKERS: 20
+      TELEGRAM_BOT_TOKEN: token
+      TELEGRAM_BOT_API_URL: https://api.telegram.org/bot
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: pass
+      DB_NAME: bot
     depends_on:
       - db
     volumes:
       - "bot-logs:/bot-logs"
 
   db:
+    image: registry.gitlab.com/tduchnowski/lingo-cards-bot/postgres:1.0.0
     build:
       context: ./postgres
       dockerfile: Dockerfile
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: pass
       POSTGRES_DB: bot
     ports:
       - "5432:5432"

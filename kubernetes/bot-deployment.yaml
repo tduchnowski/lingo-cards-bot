@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bot
+  namespace: lingo-cards
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bot
+  template:
+    metadata:
+      labels:
+        app: bot
+    spec:
+      imagePullSecrets:
+      - name: regcred
+      containers:
+      - name: bot
+        image: registry.gitlab.com/tduchnowski/lingo-cards-bot/bot:1.0.0
+        imagePullPolicy: Always
+        env:
+        - name: MAX_WORKERS
+          valueFrom:
+            configMapKeyRef:
+              name: bot-config
+              key: MAX_WORKERS
+        - name: TELEGRAM_BOT_TOKEN
+          valueFrom:
+            configMapKeyRef:
+              name: bot-config
+              key: TELEGRAM_BOT_TOKEN
+        - name: TELEGRAM_BOT_API_URL
+          valueFrom:
+            configMapKeyRef:
+              name: bot-config
+              key: TELEGRAM_BOT_API_URL
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: bot-config
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: bot-config
+              key: DB_PORT
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: bot-config
+              key: DB_USER
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: bot-config
+              key: DB_NAME
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
