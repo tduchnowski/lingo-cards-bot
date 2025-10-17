@@ -38,7 +38,7 @@ func main() {
 	bot.AddCmdHandler(handler.NewCommandHandler(db))
 	bot.AddCallbackHandler(handler.NewCallbackHandler(db))
 	ctx, cancel := context.WithCancel(context.Background())
-	go bot.Start(ctx, 60)
+	go bot.Start(ctx)
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	<-sigs

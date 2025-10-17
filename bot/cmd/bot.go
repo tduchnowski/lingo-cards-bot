@@ -10,7 +10,6 @@ import (
 	"lang-learn-bot/telegramapi"
 	"log/slog"
 	"net/http"
-	"time"
 )
 
 type Bot struct {
@@ -30,98 +29,93 @@ func (b *Bot) AddCallbackHandler(callbackHandler handler.CallbackHandler) {
 	b.callbackHandler = callbackHandler
 }
 
-func (b Bot) Start(ctx context.Context, timeout int) {
+func (b Bot) Start(ctx context.Context) {
 	slog.Info("Starting bot")
-	lastId := int64(0)
-	client := http.Client{Timeout: time.Duration(timeout) * time.Second}
+	updateChan := make(chan telegramapi.Update)
+	defer close(updateChan)
+	go ListenForUpdates(ctx, updateChan, 8080)
 	for {
-		urlQuery := fmt.Sprintf("%s/getUpdates?timeout=%d&offset=%d", b.baseUrl, timeout, lastId+1)
-		req, err := http.NewRequestWithContext(ctx, "GET", urlQuery, nil)
-		if err != nil {
-			slog.Error("error creating a request: " + err.Error())
-			time.Sleep(5 * time.Second)
-			continue
+		select {
+		case <-ctx.Done():
+			return
+		case update := <-updateChan:
+			b.handleUpdate(update)
 		}
-		slog.Debug("fetching updates from Telegram")
-		res, clientErr := client.Do(req)
-		if clientErr != nil {
-			if errors.Is(clientErr, context.Canceled) {
-				slog.Info("bot stopped")
-				return
-			}
-			slog.Error("error during update fetching " + clientErr.Error())
-			time.Sleep(5 * time.Second)
-			continue
-		}
-		if res.StatusCode != 200 {
-			slog.Error(fmt.Sprintf("telegram responded with status: %s", res.Status))
-			time.Sleep(5 * time.Second)
-			continue
-		}
-		body, readErr := io.ReadAll(res.Body)
-		if readErr != nil {
-			slog.Error(readErr.Error())
-			time.Sleep(5 * time.Second)
-			continue
-		}
-		lastId = b.handleUpdateResponse(body)
-		res.Body.Close()
 	}
 }
 
-func (b Bot) handleUpdateResponse(updateBody []byte) int64 {
-	var ur telegramapi.UpdateResponse
-	err := json.Unmarshal(updateBody, &ur)
-	if err != nil {
-		slog.Error("handleUpdateResponse - " + err.Error())
-		return 0
-	}
-	slog.Debug(fmt.Sprintf("received %d updates", len(ur.Updates)))
-	var lastUpdateId int64
-	for _, update := range ur.Updates {
-		b.sem <- struct{}{}
-		go func() {
-			var reply handler.Responder
-			switch update.GetUpdateType() {
-			case "message":
-				reply = b.cmdHandler.GetResponder(update.Msg)
-			case "callback":
-				reply = b.callbackHandler.GetResponder(update.CallbackQuery)
-			default:
-				reply = handler.SendMsg{}
-			}
-			reply.Respond(b.baseUrl)
-			<-b.sem
-		}()
-		lastUpdateId = update.Id
-	}
-	return lastUpdateId
+func (b Bot) handleUpdate(update telegramapi.Update) {
+	b.sem <- struct{}{}
+	go func() {
+		var reply handler.Responder
+		switch update.GetUpdateType() {
+		case "message":
+			reply = b.cmdHandler.GetResponder(update.Msg)
+		case "callback":
+			reply = b.callbackHandler.GetResponder(update.CallbackQuery)
+		default:
+			reply = handler.SendMsg{}
+		}
+		reply.Respond(b.baseUrl)
+		<-b.sem
+	}()
 }
 
-// verifies token and then creates Bot struct and returns it
 func CreateBot(telegramConfig TelegramConfig, maxWorkers int) (Bot, error) {
 	baseUrl := telegramConfig.BotApiUrl + telegramConfig.BotToken
-	getMeUrl := baseUrl + "/getMe"
-	res, err := http.Get(getMeUrl)
-	if err != nil {
-		return Bot{}, err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return Bot{}, errors.New("/getMe request: " + res.Status)
-	}
-	body, err := io.ReadAll(res.Body)
-	var ur telegramapi.UserResponse
-	err = json.Unmarshal(body, &ur)
-	if err != nil {
+	botUser, err := ValidateBot(baseUrl)
+	if err != nil || SetWebhook(baseUrl, telegramConfig.WebhookUrl) != nil {
 		return Bot{}, err
 	}
 	workerSem := make(chan struct{}, maxWorkers)
 	bot := Bot{
-		User:    ur.User,
+		User:    botUser.User,
 		token:   telegramConfig.BotToken,
 		baseUrl: baseUrl,
 		sem:     workerSem,
 	}
 	return bot, nil
+}
+
+func ValidateBot(botBaseUrl string) (telegramapi.UserResponse, error) {
+	var botUser telegramapi.UserResponse
+	getMeUrl := botBaseUrl + "/getMe"
+	res, err := http.Get(getMeUrl)
+	if err != nil {
+		return botUser, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return botUser, errors.New("/getMe request: " + res.Status)
+	}
+	body, err := io.ReadAll(res.Body)
+	err = json.Unmarshal(body, &botUser)
+	if err != nil {
+		return botUser, err
+	}
+	return botUser, nil
+}
+
+func SetWebhook(botBaseUrl, webhookUrl string) error {
+	// https://api.telegram.org/bot<token>/setWebhook?url=https://myserver.com/webhook
+	setWebhookUrl := fmt.Sprintf("%s/setWebhook?url=%s", botBaseUrl, webhookUrl)
+	res, err := http.Get(setWebhookUrl)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return errors.New("/getMe request: " + res.Status)
+	}
+	body, err := io.ReadAll(res.Body)
+	fmt.Println(string(body))
+	var setWebhookResponse telegramapi.SetWebhookResponse
+	err = json.Unmarshal(body, &setWebhookResponse)
+	if err != nil {
+		return err
+	}
+	if !setWebhookResponse.Ok || !setWebhookResponse.Result {
+		return fmt.Errorf("couldn't set webhook; description:%s", setWebhookResponse.Description)
+	}
+	return nil
 }

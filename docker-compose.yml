@@ -1,6 +1,6 @@
 services:
   bot:
-    image: registry.gitlab.com/tduchnowski/lingo-cards-bot/bot:1.0.0
+    image: bot
     build:
       context: ./bot
       dockerfile: Dockerfile
@@ -19,7 +19,7 @@ services:
       - "bot-logs:/bot-logs"
 
   db:
-    image: registry.gitlab.com/tduchnowski/lingo-cards-bot/postgres:1.0.0
+    image: postgres-dev
     build:
       context: ./postgres
       dockerfile: Dockerfile

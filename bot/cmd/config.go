@@ -8,8 +8,9 @@ import (
 )
 
 type TelegramConfig struct {
-	BotToken  string `mapstructure:"BOT_TOKEN"`
-	BotApiUrl string `mapstructure:"BOT_API_URL"`
+	BotToken   string `mapstructure:"BOT_TOKEN"`
+	BotApiUrl  string `mapstructure:"BOT_API_URL"`
+	WebhookUrl string `mapstructure:"WEBHOOK_URL"`
 }
 
 type DbConfig struct {
@@ -44,7 +45,7 @@ func LoadConfig(path string) (Config, error) {
 
 func ValidateConfig(cfg *Config) bool {
 	// ensure all the fields are non empty
-	if cfg.Telegram.BotApiUrl == "" || cfg.Telegram.BotToken == "" || cfg.Db.Host == "" || cfg.Db.Port == 0 || cfg.Db.User == "" || cfg.Db.Name == "" || cfg.Db.Password == "" {
+	if cfg.Telegram.BotApiUrl == "" || cfg.Telegram.BotToken == "" || cfg.Telegram.WebhookUrl == "" || cfg.Db.Host == "" || cfg.Db.Port == 0 || cfg.Db.User == "" || cfg.Db.Name == "" || cfg.Db.Password == "" {
 		return false
 	}
 	return true

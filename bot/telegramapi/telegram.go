@@ -16,6 +16,12 @@ type UserResponse struct {
 	User User `json:"result"`
 }
 
+type SetWebhookResponse struct {
+	Ok          bool   `json:"ok"`
+	Result      bool   `json:"result"`
+	Description string `json:"description"`
+}
+
 // TODO: find out whats the errors structure
 type ErrorResponse struct {
 }
